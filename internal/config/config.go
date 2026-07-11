@@ -16,8 +16,7 @@ type Config struct {
 	// Listen address for HTTP server
 	ListenAddress string `mapstructure:"listen_address" default:":9805" env:"LISTEN_ADDRESS"`
 
-	// Traceroute settings
-	TraceroutePath        string        `mapstructure:"traceroute_path" default:"traceroute" env:"TRACEROUTE_PATH"`
+	// Traceroute settings (native Go implementation, no external binary needed)
 	DefaultMethod         string        `mapstructure:"default_method" default:"auto" env:"TRACEROUTE_METHOD"`
 	DefaultMaxHops        int           `mapstructure:"default_max_hops" default:"30" env:"TRACEROUTE_MAX_HOPS"`
 	DefaultQueries        int           `mapstructure:"default_queries" default:"1" env:"TRACEROUTE_QUERIES"`
@@ -70,7 +69,6 @@ func LoadConfig(ctx context.Context, configPath string) (*Config, error) {
 
 	logger.Debug("config loaded",
 		zap.String("listen_address", cfg.ListenAddress),
-		zap.String("traceroute_path", cfg.TraceroutePath),
 		zap.String("default_method", cfg.DefaultMethod),
 	)
 

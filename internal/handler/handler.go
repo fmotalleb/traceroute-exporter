@@ -135,8 +135,7 @@ func (e *Exporter) Trace(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	resolved := traceroute.ResolveTarget(traceCtx, spec.Host, opts.IPFamily)
-	cmdResult, trace, traceErr := traceroute.ProbeTrace(traceCtx, e.cfg.TraceroutePath, spec, opts, resolved)
-	trace.RawOutput = cmdResult.Output
+	trace, traceErr := traceroute.ProbeTrace(traceCtx, spec, opts, resolved)
 
 	base := traceroute.BaseLabels(opts, spec)
 	if trace.DestinationHost == "" {
@@ -154,7 +153,7 @@ func (e *Exporter) Trace(w http.ResponseWriter, r *http.Request) {
 	trace.Reached = traceroute.ComputeReached(trace, spec)
 
 	commandSuccess := 0.0
-	if traceErr == nil && !cmdResult.TimedOut && cmdResult.ExitCode == 0 {
+	if traceErr == nil {
 		commandSuccess = 1
 	}
 	parseSuccess := 0.0
@@ -168,7 +167,6 @@ func (e *Exporter) Trace(w http.ResponseWriter, r *http.Request) {
 
 	metrics.WriteMetric(&b, "traceroute_probe_duration_seconds", base, time.Since(started).Seconds())
 	metrics.WriteMetric(&b, "traceroute_command_success", base, commandSuccess)
-	metrics.WriteMetric(&b, "traceroute_command_exit_code", base, float64(cmdResult.ExitCode))
 	metrics.WriteMetric(&b, "traceroute_output_parse_success", base, parseSuccess)
 	metrics.WriteMetric(&b, "traceroute_probe_success", base, probeSuccess)
 	metrics.WriteMetric(&b, "traceroute_hops", base, float64(traceroute.LastHop(trace.Hops)))
@@ -186,10 +184,8 @@ func (e *Exporter) Trace(w http.ResponseWriter, r *http.Request) {
 
 	if traceErr != nil {
 		reason := "command_failed"
-		if cmdResult.TimedOut || errors.Is(traceCtx.Err(), context.DeadlineExceeded) {
+		if errors.Is(traceCtx.Err(), context.DeadlineExceeded) {
 			reason = "timeout"
-		} else if cmdResult.ExitCode == -1 {
-			reason = "start_failed"
 		}
 		metrics.WriteMetric(&b, "traceroute_probe_error_info", traceroute.MergeLabels(base, map[string]string{"reason": reason}), 1)
 	}
@@ -276,27 +272,7 @@ func (e *Exporter) Trace(w http.ResponseWriter, r *http.Request) {
 		}), 1)
 	}
 
-	if opts.Debug {
-		if len(cmdResult.Commands) > 0 {
-			for _, command := range cmdResult.Commands {
-				b.WriteString("# traceroute_command ")
-				b.WriteString(metrics.PromComment(command))
-				b.WriteByte('\n')
-			}
-		} else {
-			b.WriteString("# traceroute_command ")
-			b.WriteString(metrics.PromComment(strings.Join(append([]string{e.cfg.TraceroutePath}, cmdResult.Args...), " ")))
-			b.WriteByte('\n')
-		}
-		for _, line := range strings.Split(cmdResult.Output, "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
-			b.WriteString("# traceroute_output ")
-			b.WriteString(metrics.PromComment(line))
-			b.WriteByte('\n')
-		}
-	}
+
 
 	logger.Debug("trace completed",
 		zap.String("target", targetParam),

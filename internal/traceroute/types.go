@@ -24,17 +24,6 @@ type TargetSpec struct {
 	Port     string
 }
 
-// CommandResult holds the result of executing a traceroute command
-type CommandResult struct {
-	Output   string
-	Args     []string
-	Commands []string
-	Duration time.Duration
-	ExitCode int
-	TimedOut bool
-	Err      error
-}
-
 // TraceResult holds the parsed traceroute output
 type TraceResult struct {
 	DestinationHost    string

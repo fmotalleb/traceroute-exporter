@@ -93,7 +93,6 @@ func run(cmd *cobra.Command, args []string) error {
 
 	logger.Info("starting traceroute exporter",
 		zap.String("listen_address", cfg.ListenAddress),
-		zap.String("traceroute_path", cfg.TraceroutePath),
 		zap.String("default_method", cfg.DefaultMethod),
 		zap.Int("default_max_hops", cfg.DefaultMaxHops),
 		zap.Int("default_queries", cfg.DefaultQueries),

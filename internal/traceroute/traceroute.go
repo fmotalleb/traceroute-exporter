@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -57,139 +56,19 @@ func BaseLabels(opts TraceOptions, spec TargetSpec) map[string]string {
 	}
 }
 
-// ProbeTrace executes a traceroute probe
-func ProbeTrace(ctx context.Context, traceroutePath string, spec TargetSpec, opts TraceOptions, resolved string) (CommandResult, TraceResult, error) {
-	if opts.LoopMaxRepeats > 0 {
-		return runTracerouteIncremental(ctx, traceroutePath, spec, opts, resolved)
-	}
-	return runTracerouteFull(ctx, traceroutePath, spec, opts, resolved)
-}
-
-func runTracerouteFull(ctx context.Context, traceroutePath string, spec TargetSpec, opts TraceOptions, resolved string) (CommandResult, TraceResult, error) {
+// ProbeTrace executes a traceroute probe using native Go packet operations
+// without depending on the system traceroute binary.
+func ProbeTrace(ctx context.Context, spec TargetSpec, opts TraceOptions, resolved string) (TraceResult, error) {
 	logger := log.FromContext(ctx)
 	trace := NewTraceResult(spec, resolved)
-	args, err := BuildTracerouteArgs(spec, opts, 1, opts.MaxHops)
-	if err != nil {
-		logger.Error("failed to build traceroute args", zap.Error(err))
-		return CommandResult{Args: args, ExitCode: -1, Err: err}, trace, err
+
+	// Build the target address for native probing
+	target := spec.Host
+	if resolved != "" {
+		target = resolved
 	}
 
-	cmdResult, err := execTraceroute(ctx, traceroutePath, args)
-	trace = ParseTraceOutput(cmdResult.Output, spec, resolved, opts.Queries)
-	trace.RawOutput = cmdResult.Output
-	trace.Loop = DetectLoop(trace.Hops, opts.LoopMaxRepeats)
-	if trace.Loop.GiveUp {
-		trace.Hops = TrimHopsAfter(trace.Hops, trace.Loop.EndHop)
-	}
-	return cmdResult, trace, err
-}
-
-func runTracerouteIncremental(ctx context.Context, traceroutePath string, spec TargetSpec, opts TraceOptions, resolved string) (CommandResult, TraceResult, error) {
-	logger := log.FromContext(ctx)
-	started := time.Now()
-	trace := NewTraceResult(spec, resolved)
-	aggregate := CommandResult{ExitCode: 0}
-	var outputParts []string
-
-	finish := func(err error) (CommandResult, TraceResult, error) {
-		aggregate.Output = strings.Join(outputParts, "\n")
-		aggregate.Duration = time.Since(started)
-		aggregate.Err = err
-		if err != nil && aggregate.ExitCode == 0 {
-			aggregate.ExitCode = -1
-		}
-		return aggregate, trace, err
-	}
-
-	for hop := 1; hop <= opts.MaxHops; hop++ {
-		if ctx.Err() != nil {
-			aggregate.TimedOut = true
-			aggregate.ExitCode = -2
-			return finish(ctx.Err())
-		}
-
-		args, err := BuildTracerouteArgs(spec, opts, hop, hop)
-		if err != nil {
-			aggregate.Args = args
-			aggregate.ExitCode = -1
-			return finish(err)
-		}
-
-		cmdResult, err := execTraceroute(ctx, traceroutePath, args)
-		aggregate.Args = cmdResult.Args
-		aggregate.Commands = append(aggregate.Commands, cmdResult.Commands...)
-		if strings.TrimSpace(cmdResult.Output) != "" {
-			outputParts = append(outputParts, cmdResult.Output)
-		}
-
-		if cmdResult.TimedOut || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			aggregate.TimedOut = true
-			aggregate.ExitCode = -2
-			return finish(ctx.Err())
-		}
-
-		hopTrace := ParseTraceOutput(cmdResult.Output, spec, resolved, opts.Queries)
-		MergeTraceDestination(&trace, hopTrace)
-		addedHop := false
-		for _, parsedHop := range hopTrace.Hops {
-			if parsedHop.Number == hop {
-				trace.Hops = append(trace.Hops, parsedHop)
-				addedHop = true
-			}
-		}
-
-		if err != nil && !addedHop {
-			aggregate.ExitCode = cmdResult.ExitCode
-			return finish(err)
-		}
-
-		trace.Loop = DetectLoop(trace.Hops, opts.LoopMaxRepeats)
-		if trace.Loop.GiveUp {
-			return finish(nil)
-		}
-		if ComputeReached(trace, spec) {
-			return finish(nil)
-		}
-	}
-
-	logger.Debug("traceroute completed", zap.Int("total_hops", len(trace.Hops)))
-	return finish(nil)
-}
-
-func execTraceroute(ctx context.Context, traceroutePath string, args []string) (CommandResult, error) {
-	logger := log.FromContext(ctx)
-	command := strings.Join(append([]string{traceroutePath}, args...), " ")
-	result := CommandResult{Args: args, Commands: []string{command}, ExitCode: 0}
-
-	logger.Debug("executing traceroute", zap.String("command", command))
-
-	cmd := exec.CommandContext(ctx, traceroutePath, args...)
-	started := time.Now()
-	out, err := cmd.CombinedOutput()
-	result.Duration = time.Since(started)
-	result.Output = string(out)
-
-	if ctx.Err() == context.DeadlineExceeded {
-		result.TimedOut = true
-		result.ExitCode = -2
-		result.Err = ctx.Err()
-		return result, ctx.Err()
-	}
-	if err != nil {
-		result.Err = err
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			result.ExitCode = -1
-		}
-		return result, err
-	}
-	return result, nil
-}
-
-// BuildTracerouteArgs constructs command-line arguments for traceroute
-func BuildTracerouteArgs(spec TargetSpec, opts TraceOptions, firstHop, maxHop int) ([]string, error) {
+	// For auto method, resolve based on port presence
 	method := NormalizeMethod(opts.Method)
 	if method == "auto" {
 		if spec.Port != "" {
@@ -197,48 +76,37 @@ func BuildTracerouteArgs(spec TargetSpec, opts TraceOptions, firstHop, maxHop in
 		} else {
 			method = "icmp"
 		}
-	}
-	if maxHop <= 0 {
-		maxHop = opts.MaxHops
-	}
-	if firstHop <= 0 {
-		firstHop = 1
+		opts.Method = method
 	}
 
-	args := []string{
-		"-m", strconv.Itoa(maxHop),
-		"-q", strconv.Itoa(opts.Queries),
-		"-w", SecondsForTraceroute(opts.Wait),
-	}
-	if firstHop > 1 {
-		args = append(args, "-f", strconv.Itoa(firstHop))
+	logger.Debug("starting native traceroute",
+		zap.String("target", target),
+		zap.String("method", method),
+		zap.Int("max_hops", opts.MaxHops),
+		zap.Int("queries", opts.Queries),
+		zap.Duration("timeout", opts.Timeout),
+	)
+
+	// Execute native traceroute
+	hops, err := NativeTraceroute(ctx, target, opts)
+	if err != nil {
+		logger.Error("native traceroute failed", zap.Error(err))
+		trace.RawOutput = fmt.Sprintf("error: %v", err)
+		return trace, err
 	}
 
-	switch NormalizeIPFamily(opts.IPFamily) {
-	case "4":
-		args = append(args, "-4")
-	case "6":
-		args = append(args, "-6")
+	trace.Hops = hops
+	trace.Loop = DetectLoop(trace.Hops, opts.LoopMaxRepeats)
+	if trace.Loop.GiveUp {
+		trace.Hops = TrimHopsAfter(trace.Hops, trace.Loop.EndHop)
 	}
 
-	switch method {
-	case "tcp":
-		args = append(args, "-T")
-		if spec.Port != "" {
-			args = append(args, "-p", spec.Port)
-		}
-	case "icmp":
-		args = append(args, "-I")
-	case "udp":
-		if spec.Port != "" {
-			args = append(args, "-p", spec.Port)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported traceroute method %q", opts.Method)
-	}
+	logger.Debug("native traceroute completed",
+		zap.Int("hops", len(trace.Hops)),
+		zap.Bool("reached", trace.Reached),
+	)
 
-	args = append(args, spec.Host)
-	return args, nil
+	return trace, nil
 }
 
 // ParseTarget parses a raw target string into a TargetSpec
