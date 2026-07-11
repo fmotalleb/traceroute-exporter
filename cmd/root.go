@@ -22,24 +22,41 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/fmotalleb/go-tools/log"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
+	"github.com/fmotalleb/traceroute-exporter/internal/config"
+	"github.com/fmotalleb/traceroute-exporter/internal/handler"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "traceroute-exporter",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "A Prometheus exporter for traceroute metrics",
+	Long: `A Prometheus exporter that performs traceroute probes and exposes
+the results as metrics. It supports TCP, ICMP, and UDP traceroute methods,
+loop detection, and a web dashboard for visualization.`,
+	RunE: run,
+}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+var (
+	configFile    string
+	listenAddress string
+	webConfigFile string
+)
+
+func init() {
+	rootCmd.Flags().StringVarP(&configFile, "config", "c", "", "path to config file (yaml/json/toml)")
+	rootCmd.Flags().StringVarP(&listenAddress, "listen-address", "l", "", "HTTP listen address (overrides config)")
+	rootCmd.Flags().StringVarP(&webConfigFile, "web.config.file", "w", "", "path to web config file for TLS/auth")
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -51,14 +68,97 @@ func Execute() {
 	}
 }
 
-func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+func run(cmd *cobra.Command, args []string) error {
+	// Create root context with logger
+	ctx := context.Background()
+	ctx = log.WithNewLoggerForced(ctx, func(b *log.Builder) *log.Builder {
+		return b.Level("info").ServiceName("traceroute-exporter")
+	})
+	logger := log.FromContext(ctx)
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.traceroute-exporter.yaml)")
+	// Load configuration
+	cfg, err := config.LoadConfig(ctx, configFile)
+	if err != nil {
+		logger.Error("failed to load config", zap.Error(err))
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Apply flag overrides
+	if listenAddress != "" {
+		cfg.ListenAddress = listenAddress
+	}
+	if webConfigFile != "" {
+		cfg.WebConfigFile = webConfigFile
+	}
+
+	logger.Info("starting traceroute exporter",
+		zap.String("listen_address", cfg.ListenAddress),
+		zap.String("traceroute_path", cfg.TraceroutePath),
+		zap.String("default_method", cfg.DefaultMethod),
+		zap.Int("default_max_hops", cfg.DefaultMaxHops),
+		zap.Int("default_queries", cfg.DefaultQueries),
+		zap.Int("loop_max_repeats", cfg.DefaultLoopMaxRepeats),
+	)
+
+	// Create exporter and HTTP server
+	exporter := handler.NewExporter(cfg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", exporter.Index)
+	mux.HandleFunc("/healthz", exporter.Healthz)
+	mux.HandleFunc("/trace", exporter.Trace)
+	mux.HandleFunc("/metrics", exporter.Metrics)
+	mux.HandleFunc("/dashboard", exporter.Dashboard)
+
+	server := &http.Server{Addr: cfg.ListenAddress}
+	useTLS, err := handler.ConfigureWebServer(ctx, server, mux, cfg.WebConfigFile)
+	if err != nil {
+		logger.Error("failed to configure web server", zap.Error(err))
+		return fmt.Errorf("failed to configure web server: %w", err)
+	}
+
+	scheme := "http"
+	if useTLS {
+		scheme = "https"
+	}
+	if cfg.WebConfigFile != "" {
+		logger.Info("loaded web config file", zap.String("path", cfg.WebConfigFile))
+	}
+	logger.Info("server starting",
+		zap.String("address", cfg.ListenAddress),
+		zap.String("scheme", scheme),
+	)
+
+	// Start server in goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		if useTLS {
+			errCh <- server.ListenAndServeTLS("", "")
+		} else {
+			errCh <- server.ListenAndServe()
+		}
+	}()
+
+	// Wait for interrupt signal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-sigCh:
+		logger.Info("received signal, shutting down", zap.String("signal", sig.String()))
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			logger.Error("server error", zap.Error(err))
+			return err
+		}
+	}
+
+	// Graceful shutdown
+	logger.Info("shutting down server")
+	if err := server.Shutdown(context.Background()); err != nil {
+		logger.Error("failed to shutdown server", zap.Error(err))
+		return err
+	}
+
+	logger.Info("server stopped")
+	return nil
 }
