@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fmotalleb/go-tools/log"
@@ -67,7 +68,6 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 				bestResult = &round
 			}
 
-			// Small delay between probes
 			if q < opts.Queries-1 {
 				select {
 				case <-ctx.Done():
@@ -83,7 +83,6 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 			hops = append(hops, hop)
 		}
 
-		// If we reached the destination, stop
 		if bestResult != nil && bestResult.reached {
 			logger.Debug("destination reached", zap.Int("ttl", ttl))
 			break
@@ -128,7 +127,6 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 	}
 	defer conn.Close()
 
-	// Set TTL on the ICMP socket
 	if conn.IPv4PacketConn() != nil {
 		if err := conn.IPv4PacketConn().SetTTL(ttl); err != nil {
 			return probeRound{timeout: true}
@@ -139,13 +137,11 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 		}
 	}
 
-	// Use our PID as ICMP ID for response matching
 	id := os.Getpid() & 0xffff
 	seq := ttl
 
 	msg := icmp.Message{
 		Type: ipv4.ICMPTypeEcho,
-		Code: 0,
 		Body: &icmp.Echo{
 			ID:   id,
 			Seq:  seq,
@@ -159,9 +155,7 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 	}
 
 	sent := time.Now()
-
-	deadline := sent.Add(timeout)
-	if err := conn.SetDeadline(deadline); err != nil {
+	if err := conn.SetDeadline(sent.Add(timeout)); err != nil {
 		return probeRound{timeout: true}
 	}
 
@@ -169,19 +163,14 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 		return probeRound{timeout: true}
 	}
 
-	// Read responses, filtering by ICMP ID
 	rb := make([]byte, 1500)
 	for {
 		n, peer, err := conn.ReadFrom(rb)
 		if err != nil {
-			if os.IsTimeout(err) || ctx.Err() != nil {
-				return probeRound{timeout: true}
-			}
 			return probeRound{timeout: true}
 		}
 
 		rtt := time.Since(sent)
-
 		rm, err := icmp.ParseMessage(1, rb[:n])
 		if err != nil {
 			continue
@@ -189,100 +178,29 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 
 		switch rm.Type {
 		case ipv4.ICMPTypeEchoReply:
-			// Echo Reply: check ID matches ours
-			if echo, ok := rm.Body.(*icmp.Echo); ok {
-				if echo.ID != id {
-					continue // Not our probe
-				}
+			if echo, ok := rm.Body.(*icmp.Echo); ok && echo.ID != id {
+				continue
 			}
 			host := resolveAddress(ctx, peer.String())
-			return probeRound{
-				host:    host,
-				address: peer.String(),
-				rtt:     rtt,
-				reached: true,
-			}
+			return probeRound{host: host, address: peer.String(), rtt: rtt, reached: true}
 
 		case ipv4.ICMPTypeTimeExceeded:
-			// Time Exceeded: the original packet is embedded in the ICMP body.
-			// Parse it to extract the ICMP ID and verify it matches our probe.
-			if matched := matchOriginalICMP(rm.Body, id); matched {
+			if matchOriginalICMP(rm.Body, id) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     rtt,
-					reached: false,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: rtt, reached: false}
 			}
-			// Not our probe, keep reading
 
 		case ipv4.ICMPTypeDestinationUnreachable:
-			// Destination Unreachable: check if it's from our probe
-			if matched := matchOriginalICMP(rm.Body, id); matched {
+			if matchOriginalICMP(rm.Body, id) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     rtt,
-					reached: true,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: rtt, reached: true}
 			}
 		}
 	}
 }
 
-// matchOriginalICMP checks if the original ICMP Echo Request embedded in
-// a Time Exceeded / Destination Unreachable message has the given ID.
-func matchOriginalICMP(body icmp.Message, targetID int) bool {
-	// The body of Time Exceeded contains the original IP packet.
-	// The first 8 bytes of the ICMP payload are the original ICMP header:
-	// Type(1) Code(1) Checksum(2) ID(2) Sequence(2)
-	ue, ok := body.(*icmp.TimeExceeded)
-	if !ok {
-		// Try Destination Unreachable
-		du, ok2 := body.(*icmp.DstUnreach)
-		if !ok2 {
-			return false
-		}
-		return matchICMPIDInPacket(du.Data, targetID)
-	}
-	return matchICMPIDInPacket(ue.Data, targetID)
-}
-
-// matchICMPIDInPacket parses the embedded original packet to find the ICMP ID.
-func matchICMPIDInPacket(data []byte, targetID int) bool {
-	// The data contains the original IP header + original ICMP payload.
-	// Parse IP header to find ICMP protocol, then read ICMP ID.
-	if len(data) < 28 { // min IP header (20) + min ICMP header (8)
-		return false
-	}
-
-	// IP header length is in the first nibble * 4
-	ipHeaderLen := int(data[0]&0x0f) * 4
-	if ipHeaderLen+8 > len(data) {
-		return false
-	}
-
-	// Check if original protocol is ICMP (protocol field at offset 9)
-	protocol := data[9]
-	if protocol != 1 { // 1 = ICMP
-		return false
-	}
-
-	// Original ICMP header starts after IP header
-	icmpStart := ipHeaderLen
-	if icmpStart+8 > len(data) {
-		return false
-	}
-
-	// ICMP ID is at bytes 4-5 (big-endian)
-	origID := int(binary.BigEndian.Uint16(data[icmpStart+4 : icmpStart+6]))
-	return origID == targetID
-}
-
-// probeUDP sends a UDP packet with the given TTL and reads ICMP Time Exceeded.
-// It matches responses by the original destination port embedded in the ICMP body.
+// probeUDP sends a raw UDP packet with the given TTL and reads ICMP Time Exceeded.
+// It uses a raw UDP socket via ipv4.PacketConn to set TTL on outgoing packets.
 func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) probeRound {
 	timeout := opts.Wait
 	if timeout <= 0 {
@@ -291,25 +209,27 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 
 	dstPort := 33434 + ttl
 
-	var dialNet string
-	if dst.IP.To4() != nil {
-		dialNet = "udp4"
-	} else {
-		dialNet = "udp6"
+	// Create a raw UDP socket to control TTL
+	pc, err := net.ListenPacket("udp4", ":0")
+	if err != nil {
+		return probeRound{timeout: true}
+	}
+	defer pc.Close()
+
+	// Wrap with ipv4.PacketConn to set TTL
+	ippc := ipv4.NewPacketConn(pc)
+	if err := ippc.SetTTL(ttl); err != nil {
+		return probeRound{timeout: true}
 	}
 
-	var addr string
-	if dst.IP.To4() != nil {
-		addr = fmt.Sprintf("%s:%d", dst.IP.String(), dstPort)
-	} else {
-		addr = fmt.Sprintf("[%s]:%d", dst.IP.String(), dstPort)
-	}
+	dstUDP := &net.UDPAddr{IP: dst.IP, Port: dstPort}
+	payload := []byte("traceroute-probe")
 
+	// Start ICMP listener in background
 	var wg sync.WaitGroup
 	var result probeRound
 	done := make(chan struct{}, 1)
 
-	// Start ICMP listener that filters by destination port
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -317,13 +237,15 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 		close(done)
 	}()
 
-	// Send UDP probe
+	// Small stagger before sending
 	time.Sleep(time.Duration(ttl-1) * 10 * time.Millisecond)
 
 	sent := time.Now()
-	conn, err := net.DialTimeout(dialNet, addr, timeout)
-	if err != nil {
-		// Even if dial fails, the ICMP listener may have captured a response
+	pc.SetDeadline(sent.Add(timeout))
+
+	// Send the raw UDP packet with TTL set
+	if _, err := pc.WriteTo(payload, dstUDP); err != nil {
+		// May still get ICMP response
 		select {
 		case <-done:
 			return result
@@ -331,11 +253,6 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 			return probeRound{timeout: true}
 		}
 	}
-
-	payload := []byte("traceroute-probe")
-	conn.SetDeadline(sent.Add(timeout))
-	conn.Write(payload)
-	conn.Close()
 
 	select {
 	case <-done:
@@ -345,25 +262,15 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 	}
 }
 
-// listenForUDPResponse listens for ICMP Time Exceeded responses matching a
-// specific destination port. The original UDP header in the ICMP body tells
-// us which port was probed, allowing us to match responses to our probes.
+// listenForUDPResponse listens for ICMP Time Exceeded matching a specific UDP port.
 func listenForUDPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
-	var network string
-	if dst.IP.To4() != nil {
-		network = "ip4:icmp"
-	} else {
-		network = "ip6:ipv6-icmp"
-	}
-
-	conn, err := icmp.ListenPacket(network, "0.0.0.0")
+	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
 		return probeRound{timeout: true}
 	}
 	defer conn.Close()
 
-	deadline := time.Now().Add(timeout)
-	conn.SetDeadline(deadline)
+	conn.SetDeadline(time.Now().Add(timeout))
 
 	rb := make([]byte, 1500)
 	for {
@@ -379,83 +286,22 @@ func listenForUDPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, tim
 
 		switch rm.Type {
 		case ipv4.ICMPTypeTimeExceeded:
-			if matched := matchOriginalUDP(rm.Body, dst, dstPort); matched {
+			if matchOriginalUDP(rm.Body, dst, dstPort) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     time.Since(time.Now()),
-					reached: false,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: false}
 			}
 		case ipv4.ICMPTypeDestinationUnreachable:
-			if matched := matchOriginalUDP(rm.Body, dst, dstPort); matched {
+			if matchOriginalUDP(rm.Body, dst, dstPort) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     time.Since(time.Now()),
-					reached: true,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: true}
 			}
 		}
 	}
 }
 
-// matchOriginalUDP checks if the original UDP packet embedded in an ICMP
-// message has the expected destination port.
-func matchOriginalUDP(body icmp.Message, dst *net.IPAddr, expectedPort int) bool {
-	ue, ok := body.(*icmp.TimeExceeded)
-	if !ok {
-		du, ok2 := body.(*icmp.DstUnreach)
-		if !ok2 {
-			return false
-		}
-		return matchUDPPortInPacket(du.Data, dst.IP, expectedPort)
-	}
-	return matchUDPPortInPacket(ue.Data, dst.IP, expectedPort)
-}
-
-// matchUDPPortInPacket parses the embedded original IP+UDP packet to verify
-// the destination port and destination IP.
-func matchUDPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) bool {
-	// data = original IP header + original UDP header + partial payload
-	if len(data) < 28 { // min IP (20) + min UDP (8)
-		return false
-	}
-
-	ipHeaderLen := int(data[0]&0x0f) * 4
-	if ipHeaderLen+8 > len(data) {
-		return false
-	}
-
-	// Check protocol: UDP = 17
-	protocol := data[9]
-	if protocol != 17 {
-		return false
-	}
-
-	// Check destination IP in original packet
-	if expectedDst.To4() != nil {
-		origDst := net.IP(data[16:20])
-		if !origDst.Equal(expectedDst.To4()) {
-			return false
-		}
-	}
-
-	// Original UDP header starts after IP header
-	udpStart := ipHeaderLen
-	if udpStart+8 > len(data) {
-		return false
-	}
-
-	// UDP destination port is at bytes 2-3 (big-endian)
-	origDstPort := int(binary.BigEndian.Uint16(data[udpStart+2 : udpStart+4]))
-	return origDstPort == expectedPort
-}
-
-// probeTCP sends a raw TCP SYN packet with the given TTL.
-// It listens for ICMP Time Exceeded (intermediate hop) or TCP RST (destination reached).
+// probeTCP sends a raw TCP SYN packet with the given TTL and listens for
+// ICMP Time Exceeded (intermediate hop) or TCP RST (destination reached).
+// Requires CAP_NET_RAW or root for raw socket access.
 func probeTCP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) probeRound {
 	timeout := opts.Wait
 	if timeout <= 0 {
@@ -463,25 +309,6 @@ func probeTCP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 	}
 
 	dstPort := 80
-
-	var dialNet string
-	if dst.IP.To4() != nil {
-		dialNet = "ip4:icmp"
-	} else {
-		dialNet = "ip6:ipv6-icmp"
-	}
-
-	// Open ICMP socket for receiving Time Exceeded / RST
-	icmpConn, err := icmp.ListenPacket(dialNet, "0.0.0.0")
-	if err != nil {
-		return probeRound{timeout: true}
-	}
-	defer icmpConn.Close()
-
-	// We also need a raw TCP socket to send SYN with TTL.
-	// Create a TCP connection to get the raw fd, then send a SYN manually.
-	// Actually, we can use a trick: connect with very short timeout,
-	// then listen on the ICMP socket for Time Exceeded.
 
 	// Start ICMP listener in background
 	var wg sync.WaitGroup
@@ -495,76 +322,147 @@ func probeTCP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 		close(done)
 	}()
 
-	// Try to connect with short timeout
-	// The SYN will have TTL set by the OS. We can't control TTL this way,
-	// but the ICMP listener will still capture Time Exceeded from intermediate hops.
-	var tcpNet string
-	if dst.IP.To4() != nil {
-		tcpNet = "tcp4"
-	} else {
-		tcpNet = "tcp6"
-	}
-
-	var addr string
-	if dst.IP.To4() != nil {
-		addr = fmt.Sprintf("%s:%d", dst.IP.String(), dstPort)
-	} else {
-		addr = fmt.Sprintf("[%s]:%d", dst.IP.String(), dstPort)
-	}
-
-	conn, err := net.DialTimeout(tcpNet, addr, timeout)
+	// Send raw TCP SYN with TTL
+	sent := time.Now()
+	err := sendRawTCPSYN(dst.IP, dstPort, ttl, sent.Add(timeout))
 	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			// Timeout: may have hit intermediate hop
-			select {
-			case <-done:
-				return result
-			case <-time.After(timeout):
-				return probeRound{timeout: true}
-			}
-		}
-		// Connection refused or other error: we reached the destination
-		peer := dst.IP.String()
-		host := resolveAddress(ctx, peer)
-		return probeRound{
-			host:    host,
-			address: peer,
-			rtt:     timeout,
-			reached: true,
-		}
+		// Raw socket failed (no CAP_NET_RAW). Fall back to regular connect.
+		// This won't show intermediate hops but at least shows the destination.
+		return probeTCPFallback(ctx, dst, dstPort, timeout)
 	}
 
-	// Connection succeeded: we reached the destination
-	peer := conn.RemoteAddr().String()
-	host := resolveAddress(ctx, peer)
-	conn.Close()
-
-	return probeRound{
-		host:    host,
-		address: peer,
-		rtt:     time.Since(time.Now()),
-		reached: true,
+	// Wait for ICMP response or timeout
+	select {
+	case <-done:
+		return result
+	case <-time.After(timeout):
+		return probeRound{timeout: true}
 	}
 }
 
-// listenForTCPResponse listens for ICMP Time Exceeded matching TCP packets
-// to a specific destination port.
-func listenForTCPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
-	var network string
-	if dst.IP.To4() != nil {
-		network = "ip4:icmp"
-	} else {
-		network = "ip6:ipv6-icmp"
+// sendRawTCPSYN sends a raw TCP SYN packet with the given TTL.
+func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, deadline time.Time) error {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
+	if err != nil {
+		return fmt.Errorf("raw socket: %w", err)
+	}
+	defer syscall.Close(fd)
+
+	// Tell kernel we're providing the IP header
+	if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1); err != nil {
+		return fmt.Errorf("setsockopt IP_HDRINCL: %w", err)
 	}
 
-	conn, err := icmp.ListenPacket(network, "0.0.0.0")
+	// Set TTL
+	if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_TTL, ttl); err != nil {
+		return fmt.Errorf("setsockopt IP_TTL: %w", err)
+	}
+
+	// Build IP header (20 bytes)
+	srcIP := net.IPv4(0, 0, 0, 0).To4()
+	ipHeader := make([]byte, 20)
+	ipHeader[0] = 0x45          // version=4, IHL=5
+	ipHeader[1] = 0             // DSCP/ECN
+	binary.BigEndian.PutUint16(ipHeader[2:4], 40) // total length: 20+20
+	ipHeader[8] = byte(ttl)     // TTL
+	ipHeader[9] = 6             // protocol: TCP
+	copy(ipHeader[12:16], srcIP)
+	copy(ipHeader[16:20], dstIP.To4())
+
+	// Build TCP header (20 bytes, SYN only)
+	tcpHeader := make([]byte, 20)
+	binary.BigEndian.PutUint16(tcpHeader[0:2], 12345)  // source port
+	binary.BigEndian.PutUint16(tcpHeader[2:4], uint16(dstPort)) // dest port
+	tcpHeader[12] = 0x50 // data offset: 5 (20 bytes)
+	tcpHeader[13] = 0x02 // flags: SYN
+	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535) // window
+
+	// Calculate TCP checksum
+	tcpLen := 20
+	pseudo := make([]byte, 12+tcpLen)
+	copy(pseudo[0:4], srcIP)
+	copy(pseudo[4:8], dstIP.To4())
+	pseudo[8] = 0
+	pseudo[9] = 6 // TCP
+	binary.BigEndian.PutUint16(pseudo[10:12], uint16(tcpLen))
+	copy(pseudo[12:], tcpHeader)
+	tcpHeader[16] = 0
+	tcpHeader[17] = 0
+	csum := tcpChecksum(pseudo)
+	binary.BigEndian.PutUint16(tcpHeader[16:18], csum)
+
+	// IP checksum
+	ipHeader[10] = 0
+	ipHeader[11] = 0
+	ipCsum := ipv4Checksum(ipHeader)
+	binary.BigEndian.PutUint16(ipHeader[10:12], ipCsum)
+
+	packet := append(ipHeader, tcpHeader...)
+
+	addr := syscall.SockaddrInet4{Port: dstPort}
+	copy(addr.Addr[:], dstIP.To4())
+
+	return syscall.Sendto(fd, packet, 0, &addr)
+}
+
+// tcpChecksum computes the TCP checksum including the pseudo-header.
+func tcpChecksum(data []byte) uint16 {
+	var sum uint32
+	for i := 0; i+1 < len(data); i += 2 {
+		sum += uint32(binary.BigEndian.Uint16(data[i:]))
+	}
+	if len(data)%2 == 1 {
+		sum += uint32(data[len(data)-1]) << 8
+	}
+	for sum>>16 != 0 {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
+}
+
+// ipv4Checksum computes the IPv4 header checksum.
+func ipv4Checksum(data []byte) uint16 {
+	var sum uint32
+	for i := 0; i+1 < len(data); i += 2 {
+		sum += uint32(binary.BigEndian.Uint16(data[i:]))
+	}
+	for sum>>16 != 0 {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
+}
+
+// probeTCPFallback is used when raw sockets aren't available (no CAP_NET_RAW).
+// It does a regular TCP connect which can only show the destination, not intermediate hops.
+func probeTCPFallback(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
+	addr := net.JoinHostPort(dst.IP.String(), fmt.Sprintf("%d", dstPort))
+
+	conn, err := net.DialTimeout("tcp4", addr, timeout)
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return probeRound{timeout: true}
+		}
+		// Connection refused = destination reached
+		peer := dst.IP.String()
+		host := resolveAddress(ctx, peer)
+		return probeRound{host: host, address: peer, rtt: timeout, reached: true}
+	}
+
+	peer := conn.RemoteAddr().String()
+	host := resolveAddress(ctx, peer)
+	conn.Close()
+	return probeRound{host: host, address: peer, rtt: time.Since(time.Now()), reached: true}
+}
+
+// listenForTCPResponse listens for ICMP Time Exceeded matching TCP packets to a specific port.
+func listenForTCPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
+	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
 		return probeRound{timeout: true}
 	}
 	defer conn.Close()
 
-	deadline := time.Now().Add(timeout)
-	conn.SetDeadline(deadline)
+	conn.SetDeadline(time.Now().Add(timeout))
 
 	rb := make([]byte, 1500)
 	for {
@@ -580,27 +478,93 @@ func listenForTCPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, tim
 
 		switch rm.Type {
 		case ipv4.ICMPTypeTimeExceeded:
-			if matched := matchOriginalTCP(rm.Body, dst, dstPort); matched {
+			if matchOriginalTCP(rm.Body, dst, dstPort) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     time.Since(time.Now()),
-					reached: false,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: false}
 			}
 		case ipv4.ICMPTypeDestinationUnreachable:
-			if matched := matchOriginalTCP(rm.Body, dst, dstPort); matched {
+			if matchOriginalTCP(rm.Body, dst, dstPort) {
 				host := resolveAddress(ctx, peer.String())
-				return probeRound{
-					host:    host,
-					address: peer.String(),
-					rtt:     time.Since(time.Now()),
-					reached: true,
-				}
+				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: true}
 			}
 		}
 	}
+}
+
+// matchOriginalICMP checks if the original ICMP Echo Request embedded in
+// a Time Exceeded / Destination Unreachable message has the given ID.
+func matchOriginalICMP(body icmp.MessageBody, targetID int) bool {
+	ue, ok := body.(*icmp.TimeExceeded)
+	if !ok {
+		du, ok2 := body.(*icmp.DstUnreach)
+		if !ok2 {
+			return false
+		}
+		return matchICMPIDInPacket(du.Data, targetID)
+	}
+	return matchICMPIDInPacket(ue.Data, targetID)
+}
+
+// matchICMPIDInPacket parses the embedded original packet to find the ICMP ID.
+func matchICMPIDInPacket(data []byte, targetID int) bool {
+	if len(data) < 28 {
+		return false
+	}
+	ipHeaderLen := int(data[0]&0x0f) * 4
+	if ipHeaderLen+8 > len(data) {
+		return false
+	}
+	protocol := data[9]
+	if protocol != 1 {
+		return false
+	}
+	icmpStart := ipHeaderLen
+	if icmpStart+8 > len(data) {
+		return false
+	}
+	origID := int(binary.BigEndian.Uint16(data[icmpStart+4 : icmpStart+6]))
+	return origID == targetID
+}
+
+// matchOriginalUDP checks if the original UDP packet embedded in an ICMP
+// message has the expected destination port.
+func matchOriginalUDP(body icmp.MessageBody, dst *net.IPAddr, expectedPort int) bool {
+	ue, ok := body.(*icmp.TimeExceeded)
+	if !ok {
+		du, ok2 := body.(*icmp.DstUnreach)
+		if !ok2 {
+			return false
+		}
+		return matchUDPPortInPacket(du.Data, dst.IP, expectedPort)
+	}
+	return matchUDPPortInPacket(ue.Data, dst.IP, expectedPort)
+}
+
+// matchUDPPortInPacket parses the embedded original IP+UDP packet.
+func matchUDPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) bool {
+	if len(data) < 28 {
+		return false
+	}
+	ipHeaderLen := int(data[0]&0x0f) * 4
+	if ipHeaderLen+8 > len(data) {
+		return false
+	}
+	protocol := data[9]
+	if protocol != 17 {
+		return false
+	}
+	if expectedDst.To4() != nil {
+		origDst := net.IP(data[16:20])
+		if !origDst.Equal(expectedDst.To4()) {
+			return false
+		}
+	}
+	udpStart := ipHeaderLen
+	if udpStart+8 > len(data) {
+		return false
+	}
+	origDstPort := int(binary.BigEndian.Uint16(data[udpStart+2 : udpStart+4]))
+	return origDstPort == expectedPort
 }
 
 // matchOriginalTCP checks if the original TCP packet embedded in an ICMP
@@ -617,51 +581,39 @@ func matchOriginalTCP(body icmp.MessageBody, dst *net.IPAddr, expectedPort int) 
 	return matchTCPPortInPacket(ue.Data, dst.IP, expectedPort)
 }
 
-// matchTCPPortInPacket parses the embedded original IP+TCP packet to verify
-// the destination port and destination IP.
+// matchTCPPortInPacket parses the embedded original IP+TCP packet.
 func matchTCPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) bool {
-	// data = original IP header + original TCP header (at least first 20 bytes)
-	if len(data) < 40 { // min IP (20) + min TCP (20)
+	if len(data) < 40 {
 		return false
 	}
-
 	ipHeaderLen := int(data[0]&0x0f) * 4
 	if ipHeaderLen+20 > len(data) {
 		return false
 	}
-
-	// Check protocol: TCP = 6
 	protocol := data[9]
 	if protocol != 6 {
 		return false
 	}
-
-	// Check destination IP in original packet
 	if expectedDst.To4() != nil {
 		origDst := net.IP(data[16:20])
 		if !origDst.Equal(expectedDst.To4()) {
 			return false
 		}
 	}
-
-	// Original TCP header starts after IP header
 	tcpStart := ipHeaderLen
 	if tcpStart+20 > len(data) {
 		return false
 	}
-
-	// TCP destination port is at bytes 2-3 (big-endian)
 	origDstPort := int(binary.BigEndian.Uint16(data[tcpStart+2 : tcpStart+4]))
 	return origDstPort == expectedPort
 }
 
-// resolveAddress tries to resolve an IP address to a hostname
+// resolveAddress tries to resolve an IP address to a hostname.
 func resolveAddress(ctx context.Context, addr string) string {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
 	}
-
 	names, err := net.LookupAddr(host)
 	if err != nil || len(names) == 0 {
 		return host
@@ -669,7 +621,7 @@ func resolveAddress(ctx context.Context, addr string) string {
 	return names[0]
 }
 
-// appendHopNode adds a probe result to the hop's node list
+// appendHopNode adds a probe result to the hop's node list.
 func appendHopNode(nodes []*Node, round probeRound, ttl int) []*Node {
 	if round.host == "" && round.address == "" {
 		return nodes
@@ -683,7 +635,6 @@ func appendHopNode(nodes []*Node, round probeRound, ttl int) []*Node {
 		id = fmt.Sprintf("no-reply-hop-%02d", ttl)
 	}
 
-	// Check if this node already exists
 	for _, n := range nodes {
 		if n.ID == id {
 			if !round.timeout {
@@ -706,15 +657,13 @@ func appendHopNode(nodes []*Node, round probeRound, ttl int) []*Node {
 		Responded: !round.timeout,
 		Role:      "hop",
 	}
-
 	if !round.timeout {
 		node.RTTs = []float64{round.rtt.Seconds()}
 	}
-
 	return append(nodes, node)
 }
 
-// countTimeouts counts the number of timeouts in a query set
+// countTimeouts counts the number of timeouts in a query set.
 func countTimeouts(nodes []*Node, queries int) int {
 	responded := 0
 	for _, n := range nodes {

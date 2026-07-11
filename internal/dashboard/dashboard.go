@@ -149,7 +149,7 @@ function parsePrometheus(text) {
       node.hop = parseInt(node.hop || '0', 10);
       node.responded = node.responded !== 'false';
       data.nodes.set(node.node, node);
-    } else if (sample.name === 'traceroute_tree_edge_info') {
+    } else if (sample.name === 'traceroute_edge_info') {
       data.edges.push(Object.assign({}, sample.labels));
     } else if (sample.name === 'traceroute_probe_success') {
       data.probeSuccess = sample.value;
