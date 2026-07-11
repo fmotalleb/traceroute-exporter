@@ -29,6 +29,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/fmotalleb/go-tools/git"
 	"github.com/fmotalleb/go-tools/log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -44,7 +45,8 @@ var rootCmd = &cobra.Command{
 	Long: `A Prometheus exporter that performs traceroute probes and exposes
 the results as metrics. It supports TCP, ICMP, and UDP traceroute methods,
 loop detection, and a web dashboard for visualization.`,
-	RunE: run,
+	Version: git.String(),
+	RunE:    run,
 }
 
 var (

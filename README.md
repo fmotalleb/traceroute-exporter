@@ -1,5 +1,9 @@
 # traceroute-exporter
 
+
+![Grafana Dashboard](./grafana/image.webp)
+
+
 A small Go HTTP exporter that runs Linux `traceroute` per scrape and emits Prometheus metrics suitable for Grafana tree/node graph visualizations.
 
 It is compatible with a blackbox-exporter style Prometheus scrape config: Prometheus sends the target as `?target=...` to `/trace`.

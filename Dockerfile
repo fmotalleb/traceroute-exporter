@@ -1,4 +1,4 @@
-FROM library/debian:trixie-slim
-COPY traceroute-exporter /
-RUN chmod +x /traceroute-exporter
+FROM scratch
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/traceroute-exporter /
 ENTRYPOINT ["/traceroute-exporter"]

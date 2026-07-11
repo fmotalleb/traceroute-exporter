@@ -1,0 +1,1280 @@
+{
+  "annotations": [],
+  "cursorSync": "Tooltip",
+  "description": "Traceroute topology and probe health. Shared nodes and edges are deduplicated by address so selecting multiple destinations produces a branching tree/graph.",
+  "editable": true,
+  "elements": {
+    "panel-1": {
+      "kind": "Panel",
+      "spec": {
+        "id": 1,
+        "title": "Destination reached",
+        "description": "Minimum final-destination success across all selected traceroutes.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "min(traceroute_probe_success{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": true,
+                      "legendFormat": "Probe success",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "NOT REACHED"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "REACHED"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "unit": "none"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-2": {
+      "kind": "Panel",
+      "spec": {
+        "id": 2,
+        "title": "Command",
+        "description": "Minimum traceroute process exit status across selected targets.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "min(traceroute_command_success{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": true,
+                      "legendFormat": "Command success",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "FAILED"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "OK"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "unit": "none"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-3": {
+      "kind": "Panel",
+      "spec": {
+        "id": 3,
+        "title": "Maximum hops",
+        "description": "Maximum parsed hop number across selected targets.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max(traceroute_hops{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": true,
+                      "legendFormat": "Hops",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "unit": "none"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-4": {
+      "kind": "Panel",
+      "spec": {
+        "id": 4,
+        "title": "Probe duration",
+        "description": "Maximum elapsed traceroute command time across selected targets.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max(traceroute_probe_duration_seconds{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": false,
+                      "legendFormat": "Duration",
+                      "range": true,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "decimals": 2,
+                "mappings": [],
+                "unit": "s"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-5": {
+      "kind": "Panel",
+      "spec": {
+        "id": 5,
+        "title": "Routing loop",
+        "description": "Maximum loop detection state across selected targets.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max(traceroute_loop_detected{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": true,
+                      "legendFormat": "Loop",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "NO LOOP"
+                      },
+                      "1": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "LOOP"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "unit": "none"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-6": {
+      "kind": "Panel",
+      "spec": {
+        "id": 6,
+        "title": "Loop give-up",
+        "description": "Maximum loop give-up state across selected targets.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "max(traceroute_loop_giveup{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"})",
+                      "instant": true,
+                      "legendFormat": "Loop give-up",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "stat",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "NO"
+                      },
+                      "1": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "GAVE UP"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "unit": "none"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-7": {
+      "kind": "Panel",
+      "spec": {
+        "id": 7,
+        "title": "Traceroute topology by address",
+        "description": "Edge-only directed topology. Grafana derives every node from source/target, preventing missing-node/nodeRadius failures. Edges with empty endpoint addresses are excluded. If Prometheus renamed the exporter target label to exported_target because of a scrape-label collision, the query restores it to target.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "edges",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "(\n  label_replace(\n    max by (id, source, exported_target) (\n      traceroute_edge_info{source!=\"exporter\",parent_address!=\"\",target_address!=\"\",exported_target=~\".+\",job=~\"${job}\",instance=~\"${instance}\"}\n    ),\n    \"target\", \"$1\", \"exported_target\", \"(.+)\"\n  )\n)\nor\n(\n  max by (id, source, target) (\n    traceroute_edge_info{source!=\"exporter\",parent_address!=\"\",target_address!=\"\",exported_target!~\".+\",job=~\"${job}\",instance=~\"${instance}\"}\n  )\n)",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "edges",
+                      "range": false,
+                      "refId": "edges"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "nodeGraph",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "nodes": {
+                "mainStatUnit": "none",
+                "secondaryStatUnit": "none",
+                "arcs": []
+              },
+              "edges": {
+                "mainStatUnit": "none",
+                "secondaryStatUnit": "none"
+              },
+              "zoomMode": "cooperative"
+            },
+            "fieldConfig": {
+              "defaults": {},
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-8": {
+      "kind": "Panel",
+      "spec": {
+        "id": 8,
+        "title": "Hop average RTT",
+        "description": "Average round-trip time reported for each responding hop.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "traceroute_hop_rtt_avg_seconds{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"}",
+                      "instant": false,
+                      "legendFormat": "hop {{hop}} · {{address}} · {{hostname}}",
+                      "range": true,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "timeseries",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "legend": {
+                "calcs": [
+                  "lastNotNull",
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 4,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "unit": "s"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-9": {
+      "kind": "Panel",
+      "spec": {
+        "id": 9,
+        "title": "Hop probe loss",
+        "description": "Fraction of probes without a reply for each hop.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "traceroute_hop_probe_loss_ratio{job=~\"${job}\",instance=~\"${instance}\"} and on(job, instance) traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"}",
+                      "instant": false,
+                      "legendFormat": "hop {{hop}} · {{address}} · {{hostname}}",
+                      "range": true,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "timeseries",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "legend": {
+                "calcs": [
+                  "lastNotNull",
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 15,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 4,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line"
+                  }
+                },
+                "mappings": [],
+                "max": 1,
+                "min": 0,
+                "unit": "percentunit"
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    },
+    "panel-10": {
+      "kind": "Panel",
+      "spec": {
+        "id": 10,
+        "title": "Selected destinations",
+        "description": "Selected traceroute destinations and their current metadata.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "prometheus",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "${DS_PROMETHEUS}"
+                    },
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\",port=~\"${port}\"}",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false,
+                      "refId": "A"
+                    }
+                  }
+                }
+              }
+            ],
+            "transformations": [],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "table",
+          "version": "13.0.0",
+          "spec": {
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": []
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "inspect": false
+                },
+                "mappings": []
+              },
+              "overrides": []
+            }
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "kind": "GridLayout",
+    "spec": {
+      "items": [
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-1"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-2"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-3"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 12,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-4"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 16,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-5"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 20,
+            "y": 0,
+            "width": 4,
+            "height": 4,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-6"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 0,
+            "y": 4,
+            "width": 24,
+            "height": 18,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-7"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 0,
+            "y": 22,
+            "width": 12,
+            "height": 9,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-8"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 12,
+            "y": 22,
+            "width": 12,
+            "height": 9,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-9"
+            }
+          }
+        },
+        {
+          "kind": "GridLayoutItem",
+          "spec": {
+            "x": 0,
+            "y": 31,
+            "width": 24,
+            "height": 8,
+            "element": {
+              "kind": "ElementReference",
+              "name": "panel-10"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "links": [],
+  "liveNow": false,
+  "preload": false,
+  "tags": [
+    "traceroute",
+    "network",
+    "prometheus",
+    "topology"
+  ],
+  "timeSettings": {
+    "timezone": "browser",
+    "from": "now-1h",
+    "to": "now",
+    "autoRefresh": "30s",
+    "autoRefreshIntervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ],
+    "hideTimepicker": false,
+    "fiscalYearStartMonth": 0
+  },
+  "title": "Traceroute Topology",
+  "variables": [
+    {
+      "kind": "DatasourceVariable",
+      "spec": {
+        "name": "DS_PROMETHEUS",
+        "pluginId": "prometheus",
+        "refresh": "onDashboardLoad",
+        "regex": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "label": "Prometheus",
+        "hide": "dontHide",
+        "skipUrlSync": false,
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "job",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Job",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info, job)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-job"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info, job)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "instance",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Instance",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info{job=~\"${job}\"}, instance)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-instance"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info{job=~\"${job}\"}, instance)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "hostname",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Target hostname",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\"}, hostname)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-hostname"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\"}, hostname)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "resolved_address",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Resolved address",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\"}, resolved_address)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-resolved_address"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\"}, resolved_address)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "destination_address",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Destination address",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\"}, address)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-destination_address"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\"}, address)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "port",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "label": "Port",
+        "hide": "dontHide",
+        "refresh": "onDashboardLoad",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "${DS_PROMETHEUS}"
+          },
+          "spec": {
+            "query": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\"}, port)",
+            "queryType": "classic",
+            "refId": "PrometheusVariableQueryEditor-port"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(traceroute_target_info{job=~\"${job}\",instance=~\"${instance}\",hostname=~\"${hostname}\",resolved_address=~\"${resolved_address}\",address=~\"${destination_address}\"}, port)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    }
+  ]
+}
