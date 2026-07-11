@@ -1,4 +1,4 @@
-module github.com/golang-templates/seed
+module github.com/fmotalleb/traceroute-exporter
 
 go 1.26.3
 
