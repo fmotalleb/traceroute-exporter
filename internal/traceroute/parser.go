@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ParseTraceOutput parses raw traceroute output into structured data
+// ParseTraceOutput parses raw traceroute output into structured data.
 func ParseTraceOutput(output string, spec TargetSpec, resolved string, queries int) TraceResult {
 	res := TraceResult{
 		DestinationHost:    spec.Host,
@@ -36,7 +36,7 @@ func ParseTraceOutput(output string, spec TargetSpec, resolved string, queries i
 	return res
 }
 
-// ParseHopLine parses a single hop line from traceroute output
+// ParseHopLine parses a single hop line from traceroute output.
 func ParseHopLine(line string, queries int) (Hop, bool) {
 	m := hopLineRE.FindStringSubmatch(line)
 	if m == nil {
@@ -159,7 +159,7 @@ func ParseHopLine(line string, queries int) (Hop, bool) {
 	return hop, true
 }
 
-// ComputeReached determines if the traceroute reached its destination
+// ComputeReached determines if the traceroute reached its destination.
 func ComputeReached(trace TraceResult, spec TargetSpec) bool {
 	addresses := map[string]struct{}{}
 	for _, addr := range []string{trace.DestinationAddress, trace.ResolvedAddress, spec.Host} {
@@ -195,7 +195,7 @@ func ComputeReached(trace TraceResult, spec TargetSpec) bool {
 	return false
 }
 
-// BuildEdges constructs edges for the tree graph
+// BuildEdges constructs edges for the tree graph.
 func BuildEdges(source *Node, hops []Hop) []Edge {
 	var edges []Edge
 	previous := []*Node{source}
@@ -213,7 +213,7 @@ func BuildEdges(source *Node, hops []Hop) []Edge {
 	return edges
 }
 
-// ParseRTT parses a round-trip time from tokens
+// ParseRTT parses a round-trip time from tokens.
 func ParseRTT(tokens []string, i int) (seconds float64, ok bool, consumeNext bool) {
 	if i >= len(tokens) {
 		return 0, false, false
@@ -233,7 +233,7 @@ func ParseRTT(tokens []string, i int) (seconds float64, ok bool, consumeNext boo
 	return 0, false, false
 }
 
-// NextTokenIsRTT checks if the next token is an RTT value
+// NextTokenIsRTT checks if the next token is an RTT value.
 func NextTokenIsRTT(tokens []string, i int) bool {
 	if i+1 >= len(tokens) {
 		return false
@@ -242,32 +242,32 @@ func NextTokenIsRTT(tokens []string, i int) bool {
 	return ok
 }
 
-// CleanToken removes whitespace and commas from a token
+// CleanToken removes whitespace and commas from a token.
 func CleanToken(s string) string {
 	return strings.Trim(strings.TrimSpace(s), ",")
 }
 
-// CleanName cleans a hostname token
+// CleanName cleans a hostname token.
 func CleanName(s string) string {
 	s = CleanToken(s)
 	s = strings.Trim(s, "[]")
 	return s
 }
 
-// CleanAddress cleans an address token
+// CleanAddress cleans an address token.
 func CleanAddress(s string) string {
 	s = CleanToken(s)
 	s = strings.Trim(s, "()[]")
 	return s
 }
 
-// IsParenAddress checks if a token is a parenthesized address
+// IsParenAddress checks if a token is a parenthesized address.
 func IsParenAddress(s string) bool {
 	s = strings.TrimSpace(s)
 	return strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") && IsAddressLike(strings.Trim(s, "()"))
 }
 
-// IsAddressLike checks if a string looks like an IP address
+// IsAddressLike checks if a string looks like an IP address.
 func IsAddressLike(s string) bool {
 	s = CleanAddress(strings.Split(s, "%")[0])
 	return net.ParseIP(s) != nil

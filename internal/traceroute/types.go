@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TraceOptions holds per-probe configuration
+// TraceOptions holds per-probe configuration.
 type TraceOptions struct {
 	Method         string
 	MaxHops        int
@@ -17,14 +17,14 @@ type TraceOptions struct {
 	Debug          bool
 }
 
-// TargetSpec represents a parsed target specification
+// TargetSpec represents a parsed target specification.
 type TargetSpec struct {
 	Original string
 	Host     string
 	Port     string
 }
 
-// TraceResult holds the parsed traceroute output
+// TraceResult holds the parsed traceroute output.
 type TraceResult struct {
 	DestinationHost    string
 	DestinationAddress string
@@ -36,7 +36,7 @@ type TraceResult struct {
 	Loop               LoopInfo
 }
 
-// Hop represents a single hop in the traceroute
+// Hop represents a single hop in the traceroute.
 type Hop struct {
 	Number int
 	Nodes  []*Node
@@ -44,7 +44,7 @@ type Hop struct {
 	Raw    string
 }
 
-// Node represents a single node at a hop
+// Node represents a single node at a hop.
 type Node struct {
 	ID        string
 	Hop       int
@@ -56,13 +56,13 @@ type Node struct {
 	Stars     int
 }
 
-// Edge represents a connection between two nodes
+// Edge represents a connection between two nodes.
 type Edge struct {
 	Parent *Node
 	Node   *Node
 }
 
-// LoopInfo contains information about detected routing loops
+// LoopInfo contains information about detected routing loops.
 type LoopInfo struct {
 	Detected bool
 	GiveUp   bool
@@ -73,5 +73,7 @@ type LoopInfo struct {
 	Pattern  string
 }
 
-var hopLineRE = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
-var headerRE = regexp.MustCompile(`^\s*traceroute(?:6)?\s+to\s+(.+?)\s+\(([^)]+)\)`)
+var (
+	hopLineRE = regexp.MustCompile(`^\s*(\d+)\s+(.*)$`)
+	headerRE  = regexp.MustCompile(`^\s*traceroute(?:6)?\s+to\s+(.+?)\s+\(([^)]+)\)`)
+)

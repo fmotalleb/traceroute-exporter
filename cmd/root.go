@@ -23,6 +23,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -38,7 +39,7 @@ import (
 	"github.com/fmotalleb/traceroute-exporter/internal/handler"
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "traceroute-exporter",
 	Short: "A Prometheus exporter for traceroute metrics",
@@ -147,7 +148,7 @@ func run(cmd *cobra.Command, args []string) error {
 	case sig := <-sigCh:
 		logger.Info("received signal, shutting down", zap.String("signal", sig.String()))
 	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", zap.Error(err))
 			return err
 		}

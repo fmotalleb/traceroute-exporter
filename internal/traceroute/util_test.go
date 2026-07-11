@@ -268,7 +268,7 @@ func TestQueryDuration_Value(t *testing.T) {
 	}
 }
 
-// mockValues implements the interface for Get(string) string
+// mockValues implements the interface for Get(string) string.
 type mockValues map[string]string
 
 func (m mockValues) Get(key string) string {

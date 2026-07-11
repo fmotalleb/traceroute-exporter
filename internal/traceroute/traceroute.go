@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// OptionsFromQuery extracts trace options from URL query parameters
+// OptionsFromQuery extracts trace options from URL query parameters.
 func OptionsFromQuery(q url.Values, defaults Options) TraceOptions {
 	loopMaxRepeats := ClampInt(QueryInt(q, "loop_max_repeats", defaults.DefaultLoopMaxRepeats), 0, 100)
 	switch strings.ToLower(strings.TrimSpace(q.Get("loop_detection"))) {
@@ -34,7 +34,7 @@ func OptionsFromQuery(q url.Values, defaults Options) TraceOptions {
 	}
 }
 
-// Options holds default configuration options
+// Options holds default configuration options.
 type Options struct {
 	DefaultMethod         string
 	DefaultMaxHops        int
@@ -45,7 +45,7 @@ type Options struct {
 	DefaultLoopMaxRepeats int
 }
 
-// BaseLabels creates base labels for metrics
+// BaseLabels creates base labels for metrics.
 func BaseLabels(opts TraceOptions, spec TargetSpec) map[string]string {
 	return map[string]string{
 		"method":           opts.Method,
@@ -109,7 +109,7 @@ func ProbeTrace(ctx context.Context, spec TargetSpec, opts TraceOptions, resolve
 	return trace, nil
 }
 
-// ParseTarget parses a raw target string into a TargetSpec
+// ParseTarget parses a raw target string into a TargetSpec.
 func ParseTarget(raw string) (TargetSpec, error) {
 	spec := TargetSpec{Original: strings.TrimSpace(raw)}
 	if spec.Original == "" {
@@ -164,7 +164,7 @@ func ParseTarget(raw string) (TargetSpec, error) {
 	return spec, nil
 }
 
-// ResolveTarget resolves a hostname to an IP address
+// ResolveTarget resolves a hostname to an IP address.
 func ResolveTarget(ctx context.Context, host, family string) string {
 	if IsAddressLike(host) {
 		return strings.Trim(host, "[]")
@@ -189,7 +189,7 @@ func ResolveTarget(ctx context.Context, host, family string) string {
 	return ""
 }
 
-// NewTraceResult creates a new TraceResult
+// NewTraceResult creates a new TraceResult.
 func NewTraceResult(spec TargetSpec, resolved string) TraceResult {
 	return TraceResult{
 		DestinationHost:    spec.Host,
@@ -199,7 +199,7 @@ func NewTraceResult(spec TargetSpec, resolved string) TraceResult {
 	}
 }
 
-// MergeTraceDestination merges destination info from source to destination
+// MergeTraceDestination merges destination info from source to destination.
 func MergeTraceDestination(dst *TraceResult, src TraceResult) {
 	if src.DestinationHost != "" {
 		dst.DestinationHost = src.DestinationHost

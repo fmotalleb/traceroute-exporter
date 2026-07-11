@@ -17,14 +17,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// WebConfig represents the web server configuration
+// WebConfig represents the web server configuration.
 type WebConfig struct {
 	TLSServerConfig  TLSServerConfig   `yaml:"tls_server_config"`
 	HTTPServerConfig HTTPServerConfig  `yaml:"http_server_config"`
 	BasicAuthUsers   map[string]string `yaml:"basic_auth_users"`
 }
 
-// TLSServerConfig holds TLS configuration
+// TLSServerConfig holds TLS configuration.
 type TLSServerConfig struct {
 	CertFile                 string   `yaml:"cert_file"`
 	KeyFile                  string   `yaml:"key_file"`
@@ -37,13 +37,13 @@ type TLSServerConfig struct {
 	CurvePreferences         []string `yaml:"curve_preferences"`
 }
 
-// HTTPServerConfig holds HTTP configuration
+// HTTPServerConfig holds HTTP configuration.
 type HTTPServerConfig struct {
 	HTTP2   *bool             `yaml:"http2"`
 	Headers map[string]string `yaml:"headers"`
 }
 
-// ConfigureWebServer sets up the HTTP server with TLS and middleware
+// ConfigureWebServer sets up the HTTP server with TLS and middleware.
 func ConfigureWebServer(ctx context.Context, server *http.Server, handler http.Handler, webConfigFile string) (bool, error) {
 	logger := log.FromContext(ctx)
 	server.Handler = handler
@@ -80,7 +80,7 @@ func ConfigureWebServer(ctx context.Context, server *http.Server, handler http.H
 	return useTLS, nil
 }
 
-// DefaultWebConfigFile returns the default web config file path
+// DefaultWebConfigFile returns the default web config file path.
 func DefaultWebConfigFile() string {
 	for _, path := range []string{"web.yml", "web.yaml"} {
 		if st, err := os.Stat(path); err == nil && !st.IsDir() {

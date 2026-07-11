@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// MergeLabels merges two label maps
+// MergeLabels merges two label maps.
 func MergeLabels(a, b map[string]string) map[string]string {
 	out := make(map[string]string, len(a)+len(b))
 	for k, v := range a {
@@ -20,7 +20,7 @@ func MergeLabels(a, b map[string]string) map[string]string {
 	return out
 }
 
-// NormalizeMethod normalizes a traceroute method string
+// NormalizeMethod normalizes a traceroute method string.
 func NormalizeMethod(method string) string {
 	switch strings.ToLower(strings.TrimSpace(method)) {
 	case "", "auto":
@@ -36,7 +36,7 @@ func NormalizeMethod(method string) string {
 	}
 }
 
-// NormalizeIPFamily normalizes an IP family string
+// NormalizeIPFamily normalizes an IP family string.
 func NormalizeIPFamily(family string) string {
 	switch strings.TrimSpace(strings.ToLower(family)) {
 	case "4", "ipv4":
@@ -48,7 +48,7 @@ func NormalizeIPFamily(family string) string {
 	}
 }
 
-// SecondsForTraceroute formats a duration for traceroute -w flag
+// SecondsForTraceroute formats a duration for traceroute -w flag.
 func SecondsForTraceroute(d time.Duration) string {
 	if d <= 0 {
 		d = time.Second
@@ -60,7 +60,7 @@ func SecondsForTraceroute(d time.Duration) string {
 	return strconv.FormatFloat(seconds, 'f', 3, 64)
 }
 
-// LossRatio calculates the loss ratio for a hop
+// LossRatio calculates the loss ratio for a hop.
 func LossRatio(hop Hop, queries int) float64 {
 	if queries <= 0 {
 		queries = 1
@@ -79,7 +79,7 @@ func LossRatio(hop Hop, queries int) float64 {
 	return float64(hop.Stars) / float64(denominator)
 }
 
-// AvgRTT calculates the average RTT
+// AvgRTT calculates the average RTT.
 func AvgRTT(values []float64) (float64, bool) {
 	if len(values) == 0 {
 		return 0, false
@@ -91,7 +91,7 @@ func AvgRTT(values []float64) (float64, bool) {
 	return sum / float64(len(values)), true
 }
 
-// LastHop returns the highest hop number
+// LastHop returns the highest hop number.
 func LastHop(hops []Hop) int {
 	last := 0
 	for _, hop := range hops {
@@ -102,12 +102,12 @@ func LastHop(hops []Hop) int {
 	return last
 }
 
-// NoReplyID generates an ID for a non-responding hop
+// NoReplyID generates an ID for a non-responding hop.
 func NoReplyID(hop int) string {
 	return fmt.Sprintf("no-reply-hop-%02d", hop)
 }
 
-// Fallback returns value if non-empty, otherwise returns fallback
+// Fallback returns value if non-empty, otherwise returns fallback.
 func Fallback(value, fallback string) string {
 	if value != "" {
 		return value
@@ -115,7 +115,7 @@ func Fallback(value, fallback string) string {
 	return fallback
 }
 
-// BoolString converts a boolean to a string
+// BoolString converts a boolean to a string.
 func BoolString(v bool) string {
 	if v {
 		return "true"
@@ -123,7 +123,7 @@ func BoolString(v bool) string {
 	return "false"
 }
 
-// BoolFloat converts a boolean to a float64
+// BoolFloat converts a boolean to a float64.
 func BoolFloat(v bool) float64 {
 	if v {
 		return 1
@@ -131,7 +131,7 @@ func BoolFloat(v bool) float64 {
 	return 0
 }
 
-// ClampInt clamps an integer to a range
+// ClampInt clamps an integer to a range.
 func ClampInt(v, min, max int) int {
 	if v < min {
 		return min
@@ -142,7 +142,7 @@ func ClampInt(v, min, max int) int {
 	return v
 }
 
-// MaxInt returns the maximum of two integers
+// MaxInt returns the maximum of two integers.
 func MaxInt(a, b int) int {
 	if a > b {
 		return a
@@ -150,7 +150,7 @@ func MaxInt(a, b int) int {
 	return b
 }
 
-// QueryString gets a string value from URL query parameters
+// QueryString gets a string value from URL query parameters.
 func QueryString(q interface{ Get(string) string }, name, def string) string {
 	if value := strings.TrimSpace(q.Get(name)); value != "" {
 		return value
@@ -158,7 +158,7 @@ func QueryString(q interface{ Get(string) string }, name, def string) string {
 	return def
 }
 
-// QueryInt gets an integer value from URL query parameters
+// QueryInt gets an integer value from URL query parameters.
 func QueryInt(q interface{ Get(string) string }, name string, def int) int {
 	if value := strings.TrimSpace(q.Get(name)); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
@@ -168,7 +168,7 @@ func QueryInt(q interface{ Get(string) string }, name string, def int) int {
 	return def
 }
 
-// QueryDuration gets a duration value from URL query parameters
+// QueryDuration gets a duration value from URL query parameters.
 func QueryDuration(q interface{ Get(string) string }, name string, def time.Duration) time.Duration {
 	value := strings.TrimSpace(q.Get(name))
 	if value == "" {
@@ -183,7 +183,7 @@ func QueryDuration(q interface{ Get(string) string }, name string, def time.Dura
 	return def
 }
 
-// TrimHopsAfter removes hops after the specified hop number
+// TrimHopsAfter removes hops after the specified hop number.
 func TrimHopsAfter(hops []Hop, lastHop int) []Hop {
 	if lastHop <= 0 {
 		return hops

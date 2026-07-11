@@ -3,9 +3,11 @@ package traceroute
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -16,7 +18,7 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-// probeRound holds the result for a single probe response
+// probeRound holds the result for a single probe response.
 type probeRound struct {
 	host    string
 	address string
@@ -92,7 +94,7 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 	return hops, nil
 }
 
-// probeHop sends a single probe at the given TTL and waits for a response
+// probeHop sends a single probe at the given TTL and waits for a response.
 func probeHop(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions, method string) probeRound {
 	switch method {
 	case "icmp":
@@ -361,21 +363,21 @@ func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, deadline time.Time) error {
 	// Build IP header (20 bytes)
 	srcIP := net.IPv4(0, 0, 0, 0).To4()
 	ipHeader := make([]byte, 20)
-	ipHeader[0] = 0x45          // version=4, IHL=5
-	ipHeader[1] = 0             // DSCP/ECN
+	ipHeader[0] = 0x45                            // version=4, IHL=5
+	ipHeader[1] = 0                               // DSCP/ECN
 	binary.BigEndian.PutUint16(ipHeader[2:4], 40) // total length: 20+20
-	ipHeader[8] = byte(ttl)     // TTL
-	ipHeader[9] = 6             // protocol: TCP
+	ipHeader[8] = byte(ttl)                       // TTL
+	ipHeader[9] = 6                               // protocol: TCP
 	copy(ipHeader[12:16], srcIP)
 	copy(ipHeader[16:20], dstIP.To4())
 
 	// Build TCP header (20 bytes, SYN only)
 	tcpHeader := make([]byte, 20)
-	binary.BigEndian.PutUint16(tcpHeader[0:2], 12345)  // source port
+	binary.BigEndian.PutUint16(tcpHeader[0:2], 12345)           // source port
 	binary.BigEndian.PutUint16(tcpHeader[2:4], uint16(dstPort)) // dest port
-	tcpHeader[12] = 0x50 // data offset: 5 (20 bytes)
-	tcpHeader[13] = 0x02 // flags: SYN
-	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535) // window
+	tcpHeader[12] = 0x50                                        // data offset: 5 (20 bytes)
+	tcpHeader[13] = 0x02                                        // flags: SYN
+	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535)         // window
 
 	// Calculate TCP checksum
 	tcpLen := 20
@@ -435,11 +437,12 @@ func ipv4Checksum(data []byte) uint16 {
 // probeTCPFallback is used when raw sockets aren't available (no CAP_NET_RAW).
 // It does a regular TCP connect which can only show the destination, not intermediate hops.
 func probeTCPFallback(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
-	addr := net.JoinHostPort(dst.IP.String(), fmt.Sprintf("%d", dstPort))
+	addr := net.JoinHostPort(dst.IP.String(), strconv.Itoa(dstPort))
 
 	conn, err := net.DialTimeout("tcp4", addr, timeout)
 	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		var netErr net.Error
+		if errors.As(err, &netErr) {
 			return probeRound{timeout: true}
 		}
 		// Connection refused = destination reached

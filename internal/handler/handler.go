@@ -22,17 +22,17 @@ import (
 	"github.com/fmotalleb/traceroute-exporter/internal/traceroute"
 )
 
-// Exporter handles HTTP requests for the traceroute exporter
+// Exporter handles HTTP requests for the traceroute exporter.
 type Exporter struct {
 	cfg *config.Config
 }
 
-// NewExporter creates an Exporter
+// NewExporter creates an Exporter.
 func NewExporter(cfg *config.Config) *Exporter {
 	return &Exporter{cfg: cfg}
 }
 
-// Index handles the root path
+// Index handles the root path.
 func (e *Exporter) Index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -54,7 +54,7 @@ func (e *Exporter) Index(w http.ResponseWriter, r *http.Request) {
 </body></html>`, exampleTrace, exampleTrace, exampleDashboard, exampleDashboard, e.cfg.DefaultLoopMaxRepeats)
 }
 
-// Healthz handles the health check endpoint
+// Healthz handles the health check endpoint.
 func (e *Exporter) Healthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ok\n"))
@@ -68,7 +68,7 @@ func (e *Exporter) Metrics(w http.ResponseWriter, r *http.Request) {
 	promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 }
 
-// Dashboard handles the dashboard endpoint
+// Dashboard handles the dashboard endpoint.
 func (e *Exporter) Dashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

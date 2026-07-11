@@ -286,7 +286,7 @@ func TestNativeTraceroute_AutoMethod(t *testing.T) {
 	}
 }
 
-// Verify the probeRound struct fields work correctly
+// Verify the probeRound struct fields work correctly.
 func TestProbeRound_Fields(t *testing.T) {
 	r := probeRound{
 		host:    "test",
@@ -312,7 +312,7 @@ func TestProbeRound_Fields(t *testing.T) {
 	}
 }
 
-// Test that appendHopNode handles address-only nodes
+// Test that appendHopNode handles address-only nodes.
 func TestAppendHopNode_AddressOnly(t *testing.T) {
 	var nodes []*Node
 	round := probeRound{
@@ -329,7 +329,7 @@ func TestAppendHopNode_AddressOnly(t *testing.T) {
 	}
 }
 
-// Test that appendHopNode handles host-only nodes
+// Test that appendHopNode handles host-only nodes.
 func TestAppendHopNode_HostOnly(t *testing.T) {
 	var nodes []*Node
 	round := probeRound{
@@ -427,5 +427,3 @@ func TestNativeTraceroute_MethodSwitch(t *testing.T) {
 		})
 	}
 }
-
-

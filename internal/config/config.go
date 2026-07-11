@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Config holds all application configuration
+// Config holds all application configuration.
 type Config struct {
 	// Listen address for HTTP server
 	ListenAddress string `mapstructure:"listen_address" default:":9805" env:"LISTEN_ADDRESS"`
@@ -34,7 +34,7 @@ type Config struct {
 	WebConfigFile string `mapstructure:"web_config_file" default:"" env:"WEB_CONFIG_FILE"`
 }
 
-// LoadConfig loads configuration from file and applies defaults
+// LoadConfig loads configuration from file and applies defaults.
 func LoadConfig(ctx context.Context, configPath string) (*Config, error) {
 	logger := log.FromContext(ctx)
 	cfg := &Config{}

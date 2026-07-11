@@ -1,6 +1,6 @@
 package dashboard
 
-// DashboardHTML contains the embedded dashboard HTML/JS
+// DashboardHTML contains the embedded dashboard HTML/JS.
 const DashboardHTML = `<!doctype html>
 <html lang="en">
 <head>

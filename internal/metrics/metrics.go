@@ -5,8 +5,9 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/fmotalleb/traceroute-exporter/internal/traceroute"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/fmotalleb/traceroute-exporter/internal/traceroute"
 )
 
 // metricDef pairs a Desc with its variable label names so we can extract
@@ -81,10 +82,14 @@ var (
 	defEdgeInfo = metricDef{prometheus.NewDesc(
 		"traceroute_edge_info",
 		"Edge samples for Grafana node graph. Labels: id, source, target.",
-		[]string{"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
-			"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded"}, nil,
-	), []string{"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
-		"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded"}}
+		[]string{
+			"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
+			"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded",
+		}, nil,
+	), []string{
+		"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
+		"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded",
+	}}
 	defHopRTT = metricDef{prometheus.NewDesc(
 		"traceroute_hop_rtt_seconds",
 		"Round-trip time for each responding probe.",
