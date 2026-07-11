@@ -157,7 +157,7 @@ func TestNativeTraceroute_ContextCanceled(t *testing.T) {
 	}
 }
 
-func TestNativeTraceroute_InvalidTarget(t *testing.T) {
+func TestNativeTraceroute_InvalidTarget(_ *testing.T) {
 	ctx := context.Background()
 	opts := TraceOptions{
 		Method:  "icmp",

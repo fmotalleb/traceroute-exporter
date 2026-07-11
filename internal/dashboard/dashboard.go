@@ -1,3 +1,4 @@
+// Package dashboard provides the embedded HTML dashboard for the traceroute exporter.
 package dashboard
 
 // DashboardHTML contains the embedded dashboard HTML/JS.

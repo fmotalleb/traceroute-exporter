@@ -22,17 +22,18 @@ func MergeLabels(a, b map[string]string) map[string]string {
 
 // NormalizeMethod normalizes a traceroute method string.
 func NormalizeMethod(method string) string {
-	switch strings.ToLower(strings.TrimSpace(method)) {
-	case "", "auto":
-		return "auto"
-	case "tcp", "t":
-		return "tcp"
-	case "icmp", "i":
-		return "icmp"
-	case "udp", "u":
-		return "udp"
+	m := strings.ToLower(strings.TrimSpace(method))
+	switch m {
+	case "", methodAuto:
+		return methodAuto
+	case methodTCP, "t":
+		return methodTCP
+	case methodICMP, "i":
+		return methodICMP
+	case methodUDP, "u":
+		return methodUDP
 	default:
-		return strings.ToLower(strings.TrimSpace(method))
+		return m
 	}
 }
 
@@ -118,9 +119,9 @@ func Fallback(value, fallback string) string {
 // BoolString converts a boolean to a string.
 func BoolString(v bool) string {
 	if v {
-		return "true"
+		return boolTrue
 	}
-	return "false"
+	return boolFalse
 }
 
 // BoolFloat converts a boolean to a float64.
@@ -132,12 +133,12 @@ func BoolFloat(v bool) float64 {
 }
 
 // ClampInt clamps an integer to a range.
-func ClampInt(v, min, max int) int {
-	if v < min {
-		return min
+func ClampInt(v, minVal, maxVal int) int {
+	if v < minVal {
+		return minVal
 	}
-	if v > max {
-		return max
+	if v > maxVal {
+		return maxVal
 	}
 	return v
 }

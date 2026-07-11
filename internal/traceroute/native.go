@@ -18,6 +18,37 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+// Constants for native traceroute packet operations.
+const (
+	bufSize        = 1500
+	probePayload   = "traceroute-probe"
+	defaultTCPPort = 80
+	udpBasePort    = 33434
+
+	// IP/TCP header constants.
+	ipHeaderLen   = 20
+	tcpHeaderLen  = 20
+	tcpTotalLen   = 40
+	dummySrcPort  = 12345
+	tcpWindowSize = 65535
+	pseudoHdrBase = 12
+	ipVersionIHL  = 0x45
+	tcpDataOffset = 0x50
+	tcpFlagsSYN   = 0x02
+
+	// Protocol numbers.
+	protoICMP = 1
+	protoTCP  = 6
+	protoUDP  = 17
+
+	// ICMP embedded packet minimum sizes.
+	minICMPDataLen = 28
+	minTCPDataLen  = 40
+
+	idMask     = 0xffff
+	probeDelay = 10 // milliseconds between probes
+)
+
 // probeRound holds the result for a single probe response.
 type probeRound struct {
 	host    string
@@ -33,8 +64,8 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 	logger := log.FromContext(ctx)
 
 	method := NormalizeMethod(opts.Method)
-	if method == "auto" {
-		method = "icmp"
+	if method == methodAuto {
+		method = methodICMP
 	}
 
 	dstAddr, err := net.ResolveIPAddr("ip", target)
@@ -74,7 +105,7 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 				select {
 				case <-ctx.Done():
 					return hops, ctx.Err()
-				case <-time.After(10 * time.Millisecond):
+				case <-time.After(probeDelay * time.Millisecond):
 				}
 			}
 		}
@@ -97,11 +128,11 @@ func NativeTraceroute(ctx context.Context, target string, opts TraceOptions) ([]
 // probeHop sends a single probe at the given TTL and waits for a response.
 func probeHop(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions, method string) probeRound {
 	switch method {
-	case "icmp":
+	case methodICMP:
 		return probeICMP(ctx, dst, ttl, opts)
-	case "udp":
+	case methodUDP:
 		return probeUDP(ctx, dst, ttl, opts)
-	case "tcp":
+	case methodTCP:
 		return probeTCP(ctx, dst, ttl, opts)
 	default:
 		return probeICMP(ctx, dst, ttl, opts)
@@ -130,16 +161,16 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 	defer conn.Close()
 
 	if conn.IPv4PacketConn() != nil {
-		if err := conn.IPv4PacketConn().SetTTL(ttl); err != nil {
+		if ttlErr := conn.IPv4PacketConn().SetTTL(ttl); ttlErr != nil {
 			return probeRound{timeout: true}
 		}
 	} else if conn.IPv6PacketConn() != nil {
-		if err := conn.IPv6PacketConn().SetHopLimit(ttl); err != nil {
+		if hopErr := conn.IPv6PacketConn().SetHopLimit(ttl); hopErr != nil {
 			return probeRound{timeout: true}
 		}
 	}
 
-	id := os.Getpid() & 0xffff
+	id := os.Getpid() & idMask
 	seq := ttl
 
 	msg := icmp.Message{
@@ -147,7 +178,7 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 		Body: &icmp.Echo{
 			ID:   id,
 			Seq:  seq,
-			Data: []byte("traceroute-probe"),
+			Data: []byte(probePayload),
 		},
 	}
 
@@ -157,15 +188,15 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 	}
 
 	sent := time.Now()
-	if err := conn.SetDeadline(sent.Add(timeout)); err != nil {
+	if deadlineErr := conn.SetDeadline(sent.Add(timeout)); deadlineErr != nil {
 		return probeRound{timeout: true}
 	}
 
-	if _, err = conn.WriteTo(wb, dst); err != nil {
+	if _, err := conn.WriteTo(wb, dst); err != nil {
 		return probeRound{timeout: true}
 	}
 
-	rb := make([]byte, 1500)
+	rb := make([]byte, bufSize)
 	for {
 		n, peer, err := conn.ReadFrom(rb)
 		if err != nil {
@@ -173,8 +204,8 @@ func probeICMP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions)
 		}
 
 		rtt := time.Since(sent)
-		rm, err := icmp.ParseMessage(1, rb[:n])
-		if err != nil {
+		rm, parseErr := icmp.ParseMessage(1, rb[:n])
+		if parseErr != nil {
 			continue
 		}
 
@@ -209,10 +240,11 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 		timeout = time.Second
 	}
 
-	dstPort := 33434 + ttl
+	dstPort := udpBasePort + ttl
 
 	// Create a raw UDP socket to control TTL
-	pc, err := net.ListenPacket("udp4", ":0")
+	lc := net.ListenConfig{}
+	pc, err := lc.ListenPacket(ctx, "udp4", ":0")
 	if err != nil {
 		return probeRound{timeout: true}
 	}
@@ -225,7 +257,7 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 	}
 
 	dstUDP := &net.UDPAddr{IP: dst.IP, Port: dstPort}
-	payload := []byte("traceroute-probe")
+	payload := []byte(probePayload)
 
 	// Start ICMP listener in background
 	var wg sync.WaitGroup
@@ -240,10 +272,12 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 	}()
 
 	// Small stagger before sending
-	time.Sleep(time.Duration(ttl-1) * 10 * time.Millisecond)
+	time.Sleep(time.Duration(ttl-1) * probeDelay * time.Millisecond)
 
 	sent := time.Now()
-	pc.SetDeadline(sent.Add(timeout))
+	if err := pc.SetDeadline(sent.Add(timeout)); err != nil {
+		return probeRound{timeout: true}
+	}
 
 	// Send the raw UDP packet with TTL set
 	if _, err := pc.WriteTo(payload, dstUDP); err != nil {
@@ -264,17 +298,23 @@ func probeUDP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 	}
 }
 
-// listenForUDPResponse listens for ICMP Time Exceeded matching a specific UDP port.
-func listenForUDPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
+// matchFunc is a function that checks if an ICMP message body matches the expected probe.
+type matchFunc func(body icmp.MessageBody) bool
+
+// listenForICMPResponse listens for ICMP Time Exceeded or Destination Unreachable
+// matching a specific probe (UDP or TCP) using the provided matcher function.
+func listenForICMPResponse(ctx context.Context, timeout time.Duration, matcher matchFunc) probeRound {
 	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
 		return probeRound{timeout: true}
 	}
 	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(timeout))
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return probeRound{timeout: true}
+	}
 
-	rb := make([]byte, 1500)
+	rb := make([]byte, bufSize)
 	for {
 		n, peer, err := conn.ReadFrom(rb)
 		if err != nil {
@@ -288,17 +328,24 @@ func listenForUDPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, tim
 
 		switch rm.Type {
 		case ipv4.ICMPTypeTimeExceeded:
-			if matchOriginalUDP(rm.Body, dst, dstPort) {
+			if matcher(rm.Body) {
 				host := resolveAddress(ctx, peer.String())
 				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: false}
 			}
 		case ipv4.ICMPTypeDestinationUnreachable:
-			if matchOriginalUDP(rm.Body, dst, dstPort) {
+			if matcher(rm.Body) {
 				host := resolveAddress(ctx, peer.String())
 				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: true}
 			}
 		}
 	}
+}
+
+// listenForUDPResponse listens for ICMP Time Exceeded matching a specific UDP port.
+func listenForUDPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
+	return listenForICMPResponse(ctx, timeout, func(body icmp.MessageBody) bool {
+		return matchOriginalUDP(body, dst, dstPort)
+	})
 }
 
 // probeTCP sends a raw TCP SYN packet with the given TTL and listens for
@@ -310,7 +357,7 @@ func probeTCP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 		timeout = time.Second
 	}
 
-	dstPort := 80
+	dstPort := defaultTCPPort
 
 	// Start ICMP listener in background
 	var wg sync.WaitGroup
@@ -343,7 +390,7 @@ func probeTCP(ctx context.Context, dst *net.IPAddr, ttl int, opts TraceOptions) 
 }
 
 // sendRawTCPSYN sends a raw TCP SYN packet with the given TTL.
-func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, deadline time.Time) error {
+func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, _ time.Time) error {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
 	if err != nil {
 		return fmt.Errorf("raw socket: %w", err)
@@ -362,30 +409,30 @@ func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, deadline time.Time) error {
 
 	// Build IP header (20 bytes)
 	srcIP := net.IPv4(0, 0, 0, 0).To4()
-	ipHeader := make([]byte, 20)
-	ipHeader[0] = 0x45                            // version=4, IHL=5
-	ipHeader[1] = 0                               // DSCP/ECN
-	binary.BigEndian.PutUint16(ipHeader[2:4], 40) // total length: 20+20
-	ipHeader[8] = byte(ttl)                       // TTL
-	ipHeader[9] = 6                               // protocol: TCP
+	ipHeader := make([]byte, ipHeaderLen)
+	ipHeader[0] = ipVersionIHL                             // version=4, IHL=5
+	ipHeader[1] = 0                                        // DSCP/ECN
+	binary.BigEndian.PutUint16(ipHeader[2:4], tcpTotalLen) // total length: 20+20
+	ipHeader[8] = byte(ttl)                                // TTL
+	ipHeader[9] = protoTCP                                 // protocol: TCP
 	copy(ipHeader[12:16], srcIP)
 	copy(ipHeader[16:20], dstIP.To4())
 
 	// Build TCP header (20 bytes, SYN only)
-	tcpHeader := make([]byte, 20)
-	binary.BigEndian.PutUint16(tcpHeader[0:2], 12345)           // source port
+	tcpHeader := make([]byte, tcpHeaderLen)
+	binary.BigEndian.PutUint16(tcpHeader[0:2], dummySrcPort)    // source port
 	binary.BigEndian.PutUint16(tcpHeader[2:4], uint16(dstPort)) // dest port
-	tcpHeader[12] = 0x50                                        // data offset: 5 (20 bytes)
-	tcpHeader[13] = 0x02                                        // flags: SYN
-	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535)         // window
+	tcpHeader[12] = tcpDataOffset                               // data offset: 5 (20 bytes)
+	tcpHeader[13] = tcpFlagsSYN                                 // flags: SYN
+	binary.BigEndian.PutUint16(tcpHeader[14:16], tcpWindowSize) // window
 
 	// Calculate TCP checksum
-	tcpLen := 20
-	pseudo := make([]byte, 12+tcpLen)
+	tcpLen := tcpHeaderLen
+	pseudo := make([]byte, pseudoHdrBase+tcpLen)
 	copy(pseudo[0:4], srcIP)
 	copy(pseudo[4:8], dstIP.To4())
 	pseudo[8] = 0
-	pseudo[9] = 6 // TCP
+	pseudo[9] = protoTCP // TCP
 	binary.BigEndian.PutUint16(pseudo[10:12], uint16(tcpLen))
 	copy(pseudo[12:], tcpHeader)
 	tcpHeader[16] = 0
@@ -399,7 +446,9 @@ func sendRawTCPSYN(dstIP net.IP, dstPort, ttl int, deadline time.Time) error {
 	ipCsum := ipv4Checksum(ipHeader)
 	binary.BigEndian.PutUint16(ipHeader[10:12], ipCsum)
 
-	packet := append(ipHeader, tcpHeader...)
+	packet := make([]byte, 0, len(ipHeader)+len(tcpHeader))
+	packet = append(packet, ipHeader...)
+	packet = append(packet, tcpHeader...)
 
 	addr := syscall.SockaddrInet4{Port: dstPort}
 	copy(addr.Addr[:], dstIP.To4())
@@ -439,13 +488,14 @@ func ipv4Checksum(data []byte) uint16 {
 func probeTCPFallback(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
 	addr := net.JoinHostPort(dst.IP.String(), strconv.Itoa(dstPort))
 
-	conn, err := net.DialTimeout("tcp4", addr, timeout)
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, "tcp4", addr)
 	if err != nil {
 		var netErr net.Error
-		if errors.As(err, &netErr) {
+		if errors.As(err, &netErr) && netErr.Timeout() {
 			return probeRound{timeout: true}
 		}
-		// Connection refused = destination reached
+		// Connection refused or other non-timeout net errors = destination reached
 		peer := dst.IP.String()
 		host := resolveAddress(ctx, peer)
 		return probeRound{host: host, address: peer, rtt: timeout, reached: true}
@@ -453,45 +503,15 @@ func probeTCPFallback(ctx context.Context, dst *net.IPAddr, dstPort int, timeout
 
 	peer := conn.RemoteAddr().String()
 	host := resolveAddress(ctx, peer)
-	conn.Close()
+	_ = conn.Close() // ignore close error
 	return probeRound{host: host, address: peer, rtt: time.Since(time.Now()), reached: true}
 }
 
 // listenForTCPResponse listens for ICMP Time Exceeded matching TCP packets to a specific port.
 func listenForTCPResponse(ctx context.Context, dst *net.IPAddr, dstPort int, timeout time.Duration) probeRound {
-	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
-	if err != nil {
-		return probeRound{timeout: true}
-	}
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(timeout))
-
-	rb := make([]byte, 1500)
-	for {
-		n, peer, err := conn.ReadFrom(rb)
-		if err != nil {
-			return probeRound{timeout: true}
-		}
-
-		rm, err := icmp.ParseMessage(1, rb[:n])
-		if err != nil {
-			continue
-		}
-
-		switch rm.Type {
-		case ipv4.ICMPTypeTimeExceeded:
-			if matchOriginalTCP(rm.Body, dst, dstPort) {
-				host := resolveAddress(ctx, peer.String())
-				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: false}
-			}
-		case ipv4.ICMPTypeDestinationUnreachable:
-			if matchOriginalTCP(rm.Body, dst, dstPort) {
-				host := resolveAddress(ctx, peer.String())
-				return probeRound{host: host, address: peer.String(), rtt: time.Since(time.Now()), reached: true}
-			}
-		}
-	}
+	return listenForICMPResponse(ctx, timeout, func(body icmp.MessageBody) bool {
+		return matchOriginalTCP(body, dst, dstPort)
+	})
 }
 
 // matchOriginalICMP checks if the original ICMP Echo Request embedded in
@@ -510,7 +530,7 @@ func matchOriginalICMP(body icmp.MessageBody, targetID int) bool {
 
 // matchICMPIDInPacket parses the embedded original packet to find the ICMP ID.
 func matchICMPIDInPacket(data []byte, targetID int) bool {
-	if len(data) < 28 {
+	if len(data) < minICMPDataLen {
 		return false
 	}
 	ipHeaderLen := int(data[0]&0x0f) * 4
@@ -518,7 +538,7 @@ func matchICMPIDInPacket(data []byte, targetID int) bool {
 		return false
 	}
 	protocol := data[9]
-	if protocol != 1 {
+	if protocol != protoICMP {
 		return false
 	}
 	icmpStart := ipHeaderLen
@@ -545,7 +565,7 @@ func matchOriginalUDP(body icmp.MessageBody, dst *net.IPAddr, expectedPort int) 
 
 // matchUDPPortInPacket parses the embedded original IP+UDP packet.
 func matchUDPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) bool {
-	if len(data) < 28 {
+	if len(data) < minICMPDataLen {
 		return false
 	}
 	ipHeaderLen := int(data[0]&0x0f) * 4
@@ -553,7 +573,7 @@ func matchUDPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) boo
 		return false
 	}
 	protocol := data[9]
-	if protocol != 17 {
+	if protocol != protoUDP {
 		return false
 	}
 	if expectedDst.To4() != nil {
@@ -586,7 +606,7 @@ func matchOriginalTCP(body icmp.MessageBody, dst *net.IPAddr, expectedPort int) 
 
 // matchTCPPortInPacket parses the embedded original IP+TCP packet.
 func matchTCPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) bool {
-	if len(data) < 40 {
+	if len(data) < minTCPDataLen {
 		return false
 	}
 	ipHeaderLen := int(data[0]&0x0f) * 4
@@ -594,7 +614,7 @@ func matchTCPPortInPacket(data []byte, expectedDst net.IP, expectedPort int) boo
 		return false
 	}
 	protocol := data[9]
-	if protocol != 6 {
+	if protocol != protoTCP {
 		return false
 	}
 	if expectedDst.To4() != nil {
@@ -617,7 +637,7 @@ func resolveAddress(ctx context.Context, addr string) string {
 	if err != nil {
 		host = addr
 	}
-	names, err := net.LookupAddr(host)
+	names, err := net.DefaultResolver.LookupAddr(ctx, host)
 	if err != nil || len(names) == 0 {
 		return host
 	}
@@ -658,7 +678,7 @@ func appendHopNode(nodes []*Node, round probeRound, ttl int) []*Node {
 		Hostname:  hostname,
 		Address:   round.address,
 		Responded: !round.timeout,
-		Role:      "hop",
+		Role:      nodeRoleHop,
 	}
 	if !round.timeout {
 		node.RTTs = []float64{round.rtt.Seconds()}

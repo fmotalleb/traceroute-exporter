@@ -84,7 +84,7 @@ func ParseHopLine(line string, queries int) (Hop, bool) {
 			Hostname:  Fallback(hostname, id),
 			Address:   address,
 			Responded: true,
-			Role:      "hop",
+			Role:      nodeRoleHop,
 		}
 		byID[id] = node
 		order = append(order, id)
@@ -152,7 +152,7 @@ func ParseHopLine(line string, queries int) (Hop, bool) {
 			Hostname:  id,
 			Address:   "*",
 			Responded: false,
-			Role:      "hop",
+			Role:      nodeRoleHop,
 			Stars:     MaxInt(hop.Stars, queries),
 		})
 	}
@@ -222,12 +222,12 @@ func ParseRTT(tokens []string, i int) (seconds float64, ok bool, consumeNext boo
 	if strings.HasSuffix(strings.ToLower(tok), "ms") && len(tok) > 2 {
 		number := strings.TrimSuffix(strings.TrimSuffix(tok, "ms"), "MS")
 		if v, err := strconv.ParseFloat(number, 64); err == nil {
-			return v / 1000, true, false
+			return v / millisecondDivisor, true, false
 		}
 	}
 	if i+1 < len(tokens) && strings.EqualFold(CleanToken(tokens[i+1]), "ms") {
 		if v, err := strconv.ParseFloat(strings.Trim(tok, ","), 64); err == nil {
-			return v / 1000, true, true
+			return v / millisecondDivisor, true, true
 		}
 	}
 	return 0, false, false

@@ -1,3 +1,4 @@
+// Package metrics provides Prometheus metric collectors for traceroute results.
 package metrics
 
 import (
@@ -8,6 +9,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/fmotalleb/traceroute-exporter/internal/traceroute"
+)
+
+// Common label name constants used across metric definitions.
+const (
+	labelEndHop        = "end_hop"
+	labelReason        = "reason"
+	labelAddress       = "address"
+	labelHop           = "hop"
+	labelParent        = "parent"
+	labelParentAddress = "parent_address"
+	labelProbe         = "probe"
+	labelVersion       = "version"
 )
 
 // metricDef pairs a Desc with its variable label names so we can extract
@@ -62,54 +75,54 @@ var (
 	defLoopInfo = metricDef{prometheus.NewDesc(
 		"traceroute_loop_info",
 		"Information about a detected routing loop. Pattern contains responding node ids in the repeated suffix.",
-		[]string{"start_hop", "end_hop", "length", "repeats", "pattern"}, nil,
-	), []string{"start_hop", "end_hop", "length", "repeats", "pattern"}}
+		[]string{"start_hop", labelEndHop, "length", "repeats", "pattern"}, nil,
+	), []string{"start_hop", labelEndHop, "length", "repeats", "pattern"}}
 	defProbeErrorInfo = metricDef{prometheus.NewDesc(
 		"traceroute_probe_error_info",
 		"Error information for failed probes. The reason label is intentionally low-cardinality.",
-		[]string{"reason"}, nil,
-	), []string{"reason"}}
+		[]string{labelReason}, nil,
+	), []string{labelReason}}
 	defTargetInfo = metricDef{prometheus.NewDesc(
 		"traceroute_target_info",
 		"Intended traceroute destination. Prometheus relabeling normally adds the scraped target label.",
-		[]string{"hostname", "address", "resolved_address", "port", "reached"}, nil,
-	), []string{"hostname", "address", "resolved_address", "port", "reached"}}
+		[]string{"hostname", labelAddress, "resolved_address", "port", "reached"}, nil,
+	), []string{"hostname", labelAddress, "resolved_address", "port", "reached"}}
 	defNodeInfo = metricDef{prometheus.NewDesc(
 		"traceroute_node_info",
 		"One sample per graph node. The hostname label is always present; non-responding hops use no-reply-hop-NN.",
-		[]string{"id", "hop", "node", "hostname", "address", "responded", "role"}, nil,
-	), []string{"id", "hop", "node", "hostname", "address", "responded", "role"}}
+		[]string{"id", labelHop, "node", "hostname", labelAddress, "responded", "role"}, nil,
+	), []string{"id", labelHop, "node", "hostname", labelAddress, "responded", "role"}}
 	defEdgeInfo = metricDef{prometheus.NewDesc(
 		"traceroute_edge_info",
 		"Edge samples for Grafana node graph. Labels: id, source, target.",
 		[]string{
-			"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
-			"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded",
+			"id", "source", "target", labelParent, "node", "parent_hop", "target_hop",
+			"parent_hostname", "target_hostname", labelParentAddress, "target_address", "target_responded",
 		}, nil,
 	), []string{
-		"id", "source", "target", "parent", "node", "parent_hop", "target_hop",
-		"parent_hostname", "target_hostname", "parent_address", "target_address", "target_responded",
+		"id", "source", "target", labelParent, "node", "parent_hop", "target_hop",
+		"parent_hostname", "target_hostname", labelParentAddress, "target_address", "target_responded",
 	}}
 	defHopRTT = metricDef{prometheus.NewDesc(
 		"traceroute_hop_rtt_seconds",
 		"Round-trip time for each responding probe.",
-		[]string{"hop", "node", "hostname", "address", "probe", "responded"}, nil,
-	), []string{"hop", "node", "hostname", "address", "probe", "responded"}}
+		[]string{labelHop, "node", "hostname", labelAddress, labelProbe, "responded"}, nil,
+	), []string{labelHop, "node", "hostname", labelAddress, labelProbe, "responded"}}
 	defHopRTTAvg = metricDef{prometheus.NewDesc(
 		"traceroute_hop_rtt_avg_seconds",
 		"Average round-trip time per responding node.",
-		[]string{"hop", "node", "hostname", "address", "responded"}, nil,
-	), []string{"hop", "node", "hostname", "address", "responded"}}
+		[]string{labelHop, "node", "hostname", labelAddress, "responded"}, nil,
+	), []string{labelHop, "node", "hostname", labelAddress, "responded"}}
 	defHopLossRatio = metricDef{prometheus.NewDesc(
 		"traceroute_hop_probe_loss_ratio",
 		"Fraction of probes that did not return a hostname/address for the hop.",
-		[]string{"hop", "node", "hostname", "address", "responded"}, nil,
-	), []string{"hop", "node", "hostname", "address", "responded"}}
+		[]string{labelHop, "node", "hostname", labelAddress, "responded"}, nil,
+	), []string{labelHop, "node", "hostname", labelAddress, "responded"}}
 	defExporterBuildInfo = metricDef{prometheus.NewDesc(
 		"traceroute_exporter_build_info",
 		"Static build information for this exporter.",
-		[]string{"version"}, nil,
-	), []string{"version"}}
+		[]string{labelVersion}, nil,
+	), []string{labelVersion}}
 )
 
 // allDescs is a pre-allocated slice of every metric descriptor.

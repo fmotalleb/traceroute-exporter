@@ -19,7 +19,7 @@ func DetectLoop(hops []Hop, maxRepeatedLoops int) LoopInfo {
 
 	signatures := respondingHopSignatures(hops)
 	n := len(signatures)
-	if n < 2 {
+	if n < minLoopLength {
 		return LoopInfo{}
 	}
 
@@ -35,7 +35,7 @@ func DetectLoop(hops []Hop, maxRepeatedLoops int) LoopInfo {
 			start -= length
 		}
 
-		if repeats < 2 {
+		if repeats < minLoopLength {
 			continue
 		}
 		candidate := LoopInfo{

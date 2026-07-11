@@ -1,9 +1,33 @@
+// Package traceroute provides traceroute probe execution and result parsing.
 package traceroute
 
 import (
 	"regexp"
 	"time"
 )
+
+// Method constants used across the traceroute package.
+const (
+	methodAuto = "auto"
+	methodTCP  = "tcp"
+	methodICMP = "icmp"
+	methodUDP  = "udp"
+
+	nodeRoleHop    = "hop"
+	nodeRoleSource = "source"
+)
+
+// Boolean string constants for metric labels.
+const (
+	boolTrue  = "true"
+	boolFalse = "false"
+)
+
+// millisecondDivisor converts milliseconds to seconds (1000 ms = 1 s).
+const millisecondDivisor = 1000
+
+// minLoopLength is the minimum number of signatures needed to detect a loop pattern.
+const minLoopLength = 2
 
 // TraceOptions holds per-probe configuration.
 type TraceOptions struct {

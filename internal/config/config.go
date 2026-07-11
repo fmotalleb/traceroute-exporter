@@ -1,3 +1,4 @@
+// Package config provides configuration loading and defaults for the traceroute exporter.
 package config
 
 import (
@@ -75,27 +76,34 @@ func LoadConfig(ctx context.Context, configPath string) (*Config, error) {
 	return cfg, nil
 }
 
+const (
+	methodAuto = "auto"
+	methodTCP  = "tcp"
+	methodICMP = "icmp"
+	methodUDP  = "udp"
+)
+
 func normalizeMethod(method string) string {
 	switch method {
-	case "", "auto":
-		return "auto"
-	case "tcp", "t":
-		return "tcp"
-	case "icmp", "i":
-		return "icmp"
-	case "udp", "u":
-		return "udp"
+	case "", methodAuto:
+		return methodAuto
+	case methodTCP, "t":
+		return methodTCP
+	case methodICMP, "i":
+		return methodICMP
+	case methodUDP, "u":
+		return methodUDP
 	default:
 		return method
 	}
 }
 
-func clampInt(v, min, max int) int {
-	if v < min {
-		return min
+func clampInt(v, minVal, maxVal int) int {
+	if v < minVal {
+		return minVal
 	}
-	if v > max {
-		return max
+	if v > maxVal {
+		return maxVal
 	}
 	return v
 }

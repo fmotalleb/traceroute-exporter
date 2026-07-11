@@ -18,7 +18,7 @@ import (
 func OptionsFromQuery(q url.Values, defaults Options) TraceOptions {
 	loopMaxRepeats := ClampInt(QueryInt(q, "loop_max_repeats", defaults.DefaultLoopMaxRepeats), 0, 100)
 	switch strings.ToLower(strings.TrimSpace(q.Get("loop_detection"))) {
-	case "0", "false", "off", "no", "disabled":
+	case "0", boolFalse, "off", "no", "disabled":
 		loopMaxRepeats = 0
 	}
 
@@ -70,11 +70,11 @@ func ProbeTrace(ctx context.Context, spec TargetSpec, opts TraceOptions, resolve
 
 	// For auto method, resolve based on port presence
 	method := NormalizeMethod(opts.Method)
-	if method == "auto" {
+	if method == methodAuto {
 		if spec.Port != "" {
-			method = "tcp"
+			method = methodTCP
 		} else {
-			method = "icmp"
+			method = methodICMP
 		}
 		opts.Method = method
 	}
@@ -123,30 +123,42 @@ func ParseTarget(raw string) (TargetSpec, error) {
 		}
 		spec.Host = u.Hostname()
 		spec.Port = u.Port()
-	} else {
-		if h, p, err := net.SplitHostPort(spec.Original); err == nil {
-			spec.Host = strings.Trim(h, "[]")
+		return finalizeParse(spec)
+	}
+
+	if h, p, err := net.SplitHostPort(spec.Original); err == nil {
+		spec.Host = strings.Trim(h, "[]")
+		spec.Port = p
+		return finalizeParse(spec)
+	}
+
+	if strings.HasPrefix(spec.Original, "[") && strings.Contains(spec.Original, "]") {
+		end := strings.Index(spec.Original, "]")
+		spec.Host = spec.Original[1:end]
+		rest := spec.Original[end+1:]
+		if strings.HasPrefix(rest, ":") {
+			spec.Port = strings.TrimPrefix(rest, ":")
+		}
+		return finalizeParse(spec)
+	}
+
+	if strings.Count(spec.Original, ":") == 1 {
+		h, p, ok := strings.Cut(spec.Original, ":")
+		if ok && h != "" && p != "" {
+			spec.Host = h
 			spec.Port = p
-		} else if strings.HasPrefix(spec.Original, "[") && strings.Contains(spec.Original, "]") {
-			end := strings.Index(spec.Original, "]")
-			spec.Host = spec.Original[1:end]
-			rest := spec.Original[end+1:]
-			if strings.HasPrefix(rest, ":") {
-				spec.Port = strings.TrimPrefix(rest, ":")
-			}
-		} else if strings.Count(spec.Original, ":") == 1 {
-			h, p, ok := strings.Cut(spec.Original, ":")
-			if ok && h != "" && p != "" {
-				spec.Host = h
-				spec.Port = p
-			} else {
-				spec.Host = spec.Original
-			}
 		} else {
 			spec.Host = spec.Original
 		}
+		return finalizeParse(spec)
 	}
 
+	spec.Host = spec.Original
+	return finalizeParse(spec)
+}
+
+// finalizeParse validates and finalizes a parsed target spec.
+func finalizeParse(spec TargetSpec) (TargetSpec, error) {
 	spec.Host = strings.TrimSpace(strings.Trim(spec.Host, "[]"))
 	spec.Port = strings.TrimSpace(spec.Port)
 	if spec.Host == "" {

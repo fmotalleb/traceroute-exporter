@@ -1,3 +1,4 @@
+// Package handler provides HTTP request handlers for the traceroute exporter.
 package handler
 
 import (
@@ -55,7 +56,7 @@ func (e *Exporter) Index(w http.ResponseWriter, r *http.Request) {
 }
 
 // Healthz handles the health check endpoint.
-func (e *Exporter) Healthz(w http.ResponseWriter, r *http.Request) {
+func (e *Exporter) Healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ok\n"))
 }
